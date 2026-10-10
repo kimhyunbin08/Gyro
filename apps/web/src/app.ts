@@ -2,7 +2,21 @@ import './styles.css';
 
 type Audience = 'student' | 'teacher' | 'parent' | 'other';
 type Service = { id:string; name:string; tagline:string; description:string; imageUrl:string; serviceUrl:string; tags:string[]; audiences:Audience[] };
-const API = ((window as Window & { __GYRO_API_URL__?: string }).__GYRO_API_URL__ || import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
+// Runtime config is fetched (not baked into the JS bundle) so the public web
+// image stays environment-agnostic; config.json is written by the container
+// entrypoint at startup. Resolved via top-level await so nothing below runs
+// before the real API base is known (avoids relying on <script> tag order).
+async function resolveApiBase(): Promise<string> {
+  try {
+    const res = await fetch('/config.json', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (typeof data.apiUrl === 'string' && data.apiUrl) return data.apiUrl.replace(/\/$/, '');
+    }
+  } catch { /* fall through to dev default */ }
+  return (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
+}
+const API = await resolveApiBase();
 const sessionId = crypto.randomUUID();
 let services: Service[] = [], index = 0, liked: Service[] = [], history: Array<{service:Service; action:'like'|'dislike'|'skip'}> = [];
 let audience: Audience | null = null, interests = new Set<string>();
