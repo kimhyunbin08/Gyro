@@ -35,4 +35,4 @@ COPY --from=builder /app/apps/web/dist ./dist
 
 EXPOSE 3000
 
-CMD ["http-server", "dist", "-p", "3000", "--cors"]
+CMD ["sh", "-c", "printf 'window.__GYRO_API_URL__=%s;' \"${GYRO_API_URL:-http://localhost:3001}\" > dist/config.js && http-server dist -p 3000 --cors"]
