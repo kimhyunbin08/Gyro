@@ -1,5 +1,6 @@
 import express, { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
+import { catalog as liveCatalog } from './catalog.js';
 
 type Audience = 'student' | 'teacher' | 'parent' | 'other';
 type EventName =
@@ -24,69 +25,6 @@ type Service = {
   audiences: Audience[];
   health: { status: 'healthy'; checkedAt: string };
 };
-
-const catalog: Omit<Service, 'health'>[] = [
-  {
-    id: 'vibe-study',
-    name: 'Vibe Study',
-    tagline: '친구와 함께 만드는 나만의 공부 루틴',
-    description: 'AI와 대화하며 오늘 할 일을 정리하고, 친구와 진행 상황을 공유하는 학습 도구예요.',
-    imageUrl: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80',
-    serviceUrl: 'https://hiyangssam.github.io/vibeshowroom/',
-    tags: ['학습', '생산성', 'AI'],
-    audiences: ['student', 'teacher'],
-  },
-  {
-    id: 'class-canvas',
-    name: 'Class Canvas',
-    tagline: '수업 아이디어를 한 장으로 펼쳐보기',
-    description: '선생님과 학생이 함께 프로젝트를 기획하고 결과를 전시하는 협업 보드예요.',
-    imageUrl: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=1200&q=80',
-    serviceUrl: 'https://hiyangssam.github.io/vibeshowroom/',
-    tags: ['학습', '협업', '창작'],
-    audiences: ['student', 'teacher'],
-  },
-  {
-    id: 'everyday-lab',
-    name: 'Everyday Lab',
-    tagline: '생활 속 궁금증을 실험으로 바꾸기',
-    description: '주변의 문제를 발견하고 작은 실험과 기록으로 해결 방법을 찾아보는 서비스예요.',
-    imageUrl: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=1200&q=80',
-    serviceUrl: 'https://hiyangssam.github.io/vibeshowroom/',
-    tags: ['생활', '창작', '탐구'],
-    audiences: ['student', 'parent', 'teacher'],
-  },
-  {
-    id: 'story-maker',
-    name: 'Story Maker',
-    tagline: '머릿속 이야기를 인터랙티브하게',
-    description: '아이디어와 그림을 연결해 나만의 짧은 이야기와 발표 자료를 만들어보세요.',
-    imageUrl: 'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=1200&q=80',
-    serviceUrl: 'https://hiyangssam.github.io/vibeshowroom/',
-    tags: ['창작', '표현', 'AI'],
-    audiences: ['student', 'parent'],
-  },
-  {
-    id: 'teacher-kit',
-    name: 'Teacher Kit',
-    tagline: '수업 준비 시간을 가볍게',
-    description: '수업 자료와 활동 아이디어를 모아두고 필요한 순간 꺼내 쓰는 교실 도구예요.',
-    imageUrl: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=1200&q=80',
-    serviceUrl: 'https://hiyangssam.github.io/vibeshowroom/',
-    tags: ['교육', '생산성', '협업'],
-    audiences: ['teacher'],
-  },
-  {
-    id: 'local-finder',
-    name: 'Local Finder',
-    tagline: '우리 동네의 새로운 쓰임 찾기',
-    description: '동네의 장소와 이야기를 지도로 기록하고, 함께 새로운 활용법을 발견해요.',
-    imageUrl: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?auto=format&fit=crop&w=1200&q=80',
-    serviceUrl: 'https://hiyangssam.github.io/vibeshowroom/',
-    tags: ['생활', '탐구', '협업'],
-    audiences: ['student', 'parent', 'other'],
-  },
-];
 
 const events: Array<{ name: EventName; sessionId: string; metadata: Record<string, unknown>; createdAt: string }> = [];
 const emailLeads = new Set<string>();
@@ -123,7 +61,7 @@ export function createApp() {
 
   app.get('/api/services', (_req, res) => {
     const checkedAt = new Date().toISOString();
-    res.json({ services: catalog.map((service) => ({ ...service, health: { status: 'healthy', checkedAt } })) });
+    res.json({ services: liveCatalog.map((service) => ({ ...service, health: { status: 'healthy', checkedAt } })) });
   });
 
   app.post('/api/events', (req, res) => {

@@ -8,7 +8,7 @@ describe('Gyro discovery API', () => {
   it('returns only healthy discovery services', async () => {
     const response = await request(app).get('/api/services');
     expect(response.status).toBe(200);
-    expect(response.body.services.length).toBeGreaterThanOrEqual(5);
+    expect(response.body.services).toHaveLength(98);
     expect(response.body.services.every((service: { health: { status: string } }) => service.health.status === 'healthy')).toBe(true);
   });
 
