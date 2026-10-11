@@ -32,12 +32,12 @@
         </div>
       </section>
 
-      <section class="shell hidden" id="cards" aria-labelledby="card-title">
+      <section class="shell hidden cards-screen" id="cards" aria-labelledby="card-title">
+        <h2 class="sr-only" id="card-title">서비스 카드를 좌우로 스와이프해 관심 있음과 관심 없음을 선택하세요.</h2>
         <nav class="topbar"><strong class="wordmark">gyro<span>.</span></strong><span class="progress" id="progress">0 / 0</span></nav>
-        <div class="card-header"><p class="eyebrow">당신의 취향을 읽는 중</p><h2 id="card-title">끌리면 오른쪽,<br /><em>아니면 왼쪽.</em></h2></div>
-        <div class="swipe-stage" id="swipe-stage" tabindex="0" aria-label="서비스 카드. 오른쪽 화살표는 관심 있음, 왼쪽 화살표는 관심 없음을 의미합니다."></div>
+        <div class="swipe-stage" id="swipe-stage" tabindex="0" aria-label="서비스 카드. 왼쪽/오른쪽으로 드래그하거나 화살표 키를 사용하세요. 오른쪽은 관심 있음, 왼쪽은 관심 없음입니다."></div>
         <div class="card-actions"><button class="round-button reject" id="reject-button" aria-label="관심 없음">×</button><button class="round-button undo" id="undo-button" aria-label="되돌리기">↶</button><button class="round-button like" id="like-button" aria-label="관심 있음">♥</button></div>
-        <p class="keyboard-hint">← 관심 없음 &nbsp;·&nbsp; → 관심 있음 &nbsp;·&nbsp; U 되돌리기</p>
+        <p class="keyboard-hint">드래그 또는 트랙패드로 스와이프 &nbsp;·&nbsp; ← 관심 없음 &nbsp;·&nbsp; → 관심 있음 &nbsp;·&nbsp; U 되돌리기</p>
       </section>
 
       <section class="shell hidden" id="results" aria-labelledby="results-title">
