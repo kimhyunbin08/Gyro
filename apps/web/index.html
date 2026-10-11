@@ -41,8 +41,8 @@
       </section>
 
       <section class="shell hidden" id="results" aria-labelledby="results-title">
-        <nav class="topbar"><strong class="wordmark">gyro<span>.</span></strong><span class="pill">YOUR PICKS</span></nav>
-        <div class="narrow"><p class="eyebrow">발견 완료</p><h2 id="results-title">당신에게 맞는<br /><em>서비스예요.</em></h2><p class="lede">관심 표시한 서비스를 먼저 모았어요. 바로 열어보고, 쓸모를 발견해보세요.</p><div id="result-list"></div><div class="email-box"><h3>결과를 나중에도 보고 싶다면</h3><p>이메일은 선택사항이며, 저장 목적 외 소식 수신은 따로 동의받아요.</p><form id="email-form"><label class="sr-only" for="email">이메일</label><input id="email" type="email" placeholder="you@example.com" required /><label class="check"><input id="updates" type="checkbox" /> 새로운 서비스 소식도 받을게요</label><button class="button button-dark full" type="submit">결과 저장하기</button><p id="email-message" class="form-message" role="status"></p></form></div><button class="text-button" id="restart-button">처음부터 다시 보기</button></div>
+        <nav class="topbar"><strong class="wordmark">gyro<span>.</span></strong><span class="pill" id="results-pill">YOUR PICKS</span></nav>
+        <div class="narrow"><p class="eyebrow" id="results-eyebrow">발견 완료</p><h2 id="results-title">당신에게 맞는<br /><em>서비스예요.</em></h2><p class="lede" id="results-lede">관심 표시한 서비스를 먼저 모았어요. 바로 열어보고, 쓸모를 발견해보세요.</p><div id="result-list"></div><button class="button button-dark full hidden" id="continue-button">다음 10개 더 보기 <span aria-hidden="true">→</span></button><div class="email-box"><h3>결과를 나중에도 보고 싶다면</h3><p>이메일은 선택사항이며, 저장 목적 외 소식 수신은 따로 동의받아요.</p><form id="email-form"><label class="sr-only" for="email">이메일</label><input id="email" type="email" placeholder="you@example.com" required /><label class="check"><input id="updates" type="checkbox" /> 새로운 서비스 소식도 받을게요</label><button class="button button-dark full" type="submit">결과 저장하기</button><p id="email-message" class="form-message" role="status"></p></form></div><button class="text-button" id="restart-button">처음부터 다시 보기</button></div>
       </section>
     </main>
     <script type="module" src="/src/app.ts"></script>
