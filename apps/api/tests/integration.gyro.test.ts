@@ -1,14 +1,16 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/server.js';
+import { catalog } from '../src/catalog.js';
 
 describe('Gyro discovery API', () => {
   const app = createApp();
+  const uniqueServiceUrls = new Set(catalog.map((service) => service.serviceUrl.trim().toLowerCase().replace(/\/+$/, '')));
 
-  it('returns only healthy discovery services', async () => {
+  it('returns only healthy discovery services, deduped by live URL', async () => {
     const response = await request(app).get('/api/services');
     expect(response.status).toBe(200);
-    expect(response.body.services).toHaveLength(98);
+    expect(response.body.services).toHaveLength(uniqueServiceUrls.size);
     expect(response.body.services.every((service: { health: { status: string } }) => service.health.status === 'healthy')).toBe(true);
   });
 

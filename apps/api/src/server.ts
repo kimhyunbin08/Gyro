@@ -38,6 +38,26 @@ const emailSchema = z.object({
   updatesOptIn: z.boolean(),
 });
 
+function normalizeServiceUrl(url: string): string {
+  return url.trim().toLowerCase().replace(/\/+$/, '');
+}
+
+// The source catalog occasionally lists the same project across multiple
+// exhibit months (resubmitted with no changes), which would otherwise show
+// the identical card twice in one swipe session. Keep only the first
+// occurrence per unique live URL.
+function dedupeCatalog(services: typeof liveCatalog): typeof liveCatalog {
+  const seen = new Set<string>();
+  return services.filter((service) => {
+    const key = normalizeServiceUrl(service.serviceUrl);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+const dedupedCatalog = dedupeCatalog(liveCatalog);
+
 function allowedOrigin(): string {
   return process.env.WEB_ORIGIN || '*';
 }
@@ -61,7 +81,7 @@ export function createApp() {
 
   app.get('/api/services', (_req, res) => {
     const checkedAt = new Date().toISOString();
-    res.json({ services: liveCatalog.map((service) => ({ ...service, health: { status: 'healthy', checkedAt } })) });
+    res.json({ services: dedupedCatalog.map((service) => ({ ...service, health: { status: 'healthy', checkedAt } })) });
   });
 
   app.post('/api/events', (req, res) => {
