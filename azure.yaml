@@ -1,0 +1,25 @@
+name: gyro
+metadata:
+  template: azd-init
+services:
+  api:
+    project: ./apps/api
+    host: containerapp
+    language: ts
+    docker:
+      path: Dockerfile
+      context: ../..
+      registry: acrdu6ob5u24hia6.azurecr.io
+      remoteBuild: true
+  web:
+    project: ./apps/web
+    host: containerapp
+    language: ts
+    docker:
+      path: Dockerfile
+      context: ../..
+      registry: acrdu6ob5u24hia6.azurecr.io
+      remoteBuild: true
+infra:
+  provider: bicep
+  path: ./infra

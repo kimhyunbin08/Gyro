@@ -1,0 +1,39 @@
+import './styles.css';
+
+type Audience = 'student' | 'teacher' | 'parent' | 'other';
+type Service = { id:string; name:string; tagline:string; description:string; imageUrl:string; serviceUrl:string; tags:string[]; audiences:Audience[] };
+// Runtime config is fetched (not baked into the JS bundle) so the public web
+// image stays environment-agnostic; config.json is written by the container
+// entrypoint at startup. Resolved via top-level await so nothing below runs
+// before the real API base is known (avoids relying on <script> tag order).
+async function resolveApiBase(): Promise<string> {
+  try {
+    const res = await fetch('/config.json', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (typeof data.apiUrl === 'string' && data.apiUrl) return data.apiUrl.replace(/\/$/, '');
+    }
+  } catch { /* fall through to dev default */ }
+  return (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
+}
+const API = await resolveApiBase();
+const sessionId = crypto.randomUUID();
+let services: Service[] = [], index = 0, liked: Service[] = [], history: Array<{service:Service; action:'like'|'dislike'|'skip'}> = [];
+let audience: Audience | null = null, interests = new Set<string>();
+const $ = <T extends HTMLElement>(id:string) => document.getElementById(id) as T;
+const screens = ['landing','profile','cards','results'];
+function show(id:string){screens.forEach(x => $(x).classList.toggle('hidden', x !== id)); window.scrollTo({top:0,behavior:'smooth'});}
+function track(name:string, metadata:Record<string,unknown>={}){void fetch(`${API}/api/events`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,sessionId,metadata})}).catch(()=>{});}
+function renderChoices(){const audiences:[Audience,string][]=[['student','학생이에요'],['teacher','선생님이에요'],['parent','학부모예요'],['other','그 외예요']];$('audience-choices').innerHTML=audiences.map(([id,label])=>`<button class="choice ${audience===id?'selected':''}" data-audience="${id}">${label}</button>`).join(''); document.querySelectorAll<HTMLElement>('[data-audience]').forEach(b=>b.onclick=()=>{audience=b.dataset.audience as Audience;renderChoices();checkProfile();}); const tags=['학습','창작','생활','생산성','협업','AI'];$('interest-choices').innerHTML=tags.map(tag=>`<button class="tag ${interests.has(tag)?'selected':''}" data-interest="${tag}">${tag}</button>`).join('');document.querySelectorAll<HTMLElement>('[data-interest]').forEach(b=>b.onclick=()=>{const tag=b.dataset.interest!;interests.has(tag)?interests.delete(tag):interests.add(tag);renderChoices();checkProfile();});}
+function checkProfile(){ $('profile-next').toggleAttribute('disabled', !audience || interests.size===0); }
+function renderCard(){ $('progress').textContent=`${index} / ${services.length}`; const stage=$('swipe-stage'); if(index>=services.length){finish();return;} const service=services[index]; stage.innerHTML=`<article class="service-card" style="background-image:url('${service.imageUrl}')"><div class="service-copy"><div class="service-tags">${service.tags.map(t=>`<span>${t}</span>`).join('')}</div><h3>${service.name}</h3><p>${service.tagline}</p></div></article>`;}
+function decide(action:'like'|'dislike'|'skip'){if(index>=services.length)return;const service=services[index++];history.push({service,action});if(action==='like')liked.push(service);track(action==='like'?'card_like':action==='dislike'?'card_dislike':'card_skip',{serviceId:service.id});renderCard();}
+function undo(){const last=history.pop();if(!last)return;index--;if(last.action==='like')liked=liked.filter(x=>x.id!==last.service.id);track('card_undo',{serviceId:last.service.id});renderCard();}
+function finish(){track('result_view',{likedCount:liked.length});show('results');$('result-list').innerHTML=liked.length?liked.map(s=>`<article class="result-item"><img src="${s.imageUrl}" alt=""><div><h3>${s.name}</h3><p>${s.tagline}</p><a href="${s.serviceUrl}" target="_blank" rel="noreferrer" data-service="${s.id}">서비스 열어보기 →</a></div></article>`).join(''):'<p class="lede">아직 관심 표시한 서비스가 없어요. 다시 둘러보며 새로운 가능성을 찾아보세요.</p>';document.querySelectorAll<HTMLAnchorElement>('[data-service]').forEach(a=>a.onclick=()=>track('service_click',{serviceId:a.dataset.service}));}
+async function load(){try{const response=await fetch(`${API}/api/services`);if(!response.ok)throw new Error('services');const payload=await response.json();services=payload.services;track('landing_view');}catch{services=[];$('start-button').textContent='서비스를 불러오지 못했어요';}}
+$('start-button').onclick=()=>{show('profile');renderChoices();};
+$('profile-next').onclick=()=>{services=[...services].sort((a,b)=>(b.tags.filter(t=>interests.has(t)).length+(b.audiences.includes(audience!)?1:0))-(a.tags.filter(t=>interests.has(t)).length+(a.audiences.includes(audience!)?1:0)));track('profile_submit',{audience,interests:[...interests]});show('cards');renderCard();};
+$('like-button').onclick=()=>decide('like');$('reject-button').onclick=()=>decide('dislike');$('undo-button').onclick=undo;$('swipe-stage').onkeydown=e=>{if(e.key==='ArrowRight')decide('like');if(e.key==='ArrowLeft')decide('dislike');if(e.key.toLowerCase()==='u')undo();};
+$('restart-button').onclick=()=>{index=0;liked=[];history=[];audience=null;interests.clear();show('landing');};
+$('email-form').onsubmit=async e=>{e.preventDefault();const message=$('email-message');try{const r=await fetch(`${API}/api/email-leads`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$<HTMLInputElement>('email').value,updatesOptIn:$<HTMLInputElement>('updates').checked})});const body=await r.json();if(!r.ok)throw new Error(body.message);message.textContent='결과를 저장했어요.';track('email_submit',{updatesOptIn:$<HTMLInputElement>('updates').checked});}catch(error){message.textContent=error instanceof Error?error.message:'저장에 실패했어요.';}};
+void load();
