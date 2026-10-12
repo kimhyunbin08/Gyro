@@ -44,6 +44,10 @@
           <div class="swipe-stage" id="swipe-stage" tabindex="0" aria-label="서비스 카드. 왼쪽/오른쪽으로 드래그하거나 화살표 키를 사용하세요. 오른쪽은 관심 있음, 왼쪽은 관심 없음입니다."></div>
           <div class="card-actions"><button class="round-button reject" id="reject-button" aria-label="관심 없음">×</button><button class="round-button undo" id="undo-button" aria-label="되돌리기">↶</button><button class="round-button like" id="like-button" aria-label="관심 있음">♥</button></div>
           <p class="keyboard-hint">드래그 또는 트랙패드로 스와이프 &nbsp;·&nbsp; ← 관심 없음 &nbsp;·&nbsp; → 관심 있음 &nbsp;·&nbsp; U 되돌리기</p>
+          <!-- Phase 2 draft (prd.md §14.3): optional, skippable 1-tap reason
+               tag shown right after a dislike swipe. Auto-dismisses so it
+               never blocks continued swiping. -->
+          <div class="reason-toast hidden" id="reason-toast" role="status" aria-label="관심 없는 이유 (선택)"></div>
         </div>
       </section>
 
@@ -76,6 +80,18 @@
         </div>
         <iframe class="preview-frame" id="preview-frame" title="서비스 미리보기"></iframe>
         <p class="preview-fallback hidden" id="preview-fallback">이 서비스는 미리보기를 지원하지 않아요. 새 탭에서 열어보세요.</p>
+        <!-- Phase 2 draft (prd.md §14.3): optional single-question retry
+             intent check shown when a preview is closed. Skippable and
+             auto-closes after a short timeout so it never strands users. -->
+        <div class="retry-intent hidden" id="retry-intent">
+          <p>이 서비스, 다시 써보고 싶나요?</p>
+          <div class="retry-intent-choices">
+            <button type="button" data-retry-intent="yes">예</button>
+            <button type="button" data-retry-intent="no">아니오</button>
+            <button type="button" data-retry-intent="unsure">글쎄요</button>
+          </div>
+          <button type="button" class="text-button" id="retry-intent-skip">건너뛰고 닫기</button>
+        </div>
       </div>
     </main>
     <script type="module" src="/src/app.ts"></script>

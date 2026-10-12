@@ -9,14 +9,17 @@
 1. 사용자 유형/관심사 사전 질문 + 서비스 카드 스와이프(라운드 배칭, 중복 제거).
 2. 서비스 카탈로그의 실시간 접속 가능 여부(health check) 서버 사이드 검증.
 3. 익명 퍼널 이벤트 수집 및 이메일 리드 저장(중복 방지).
+4. 스와이프 이유/미리보기 재체험 의향 마이크로 피드백 + 서비스별 퍼널 드롭오프 집계 통계
+   (Phase 2 §14.3 승격, 계정 불필요).
 
 ### 2.2 Out of Scope (Deferred)
 1. 로그인/회원가입, 사용자 계정/프로필 영속화.
 2. 실제 이메일 발송 파이프라인(SMTP/ESP 연동, 반송 처리, 원클릭 수신거부).
 3. 데이터베이스 영속화 — 현재 이벤트/이메일 리드는 프로세스 메모리에만 보관된다.
 
-> Phase 2("검증 루프") 설계 초안은 §10에 별도로 정리되어 있으며, 아직 구현되지 않았다. §10이
-> 실제 반영되기 전까지는 위 Out of Scope 항목이 그대로 유효하다.
+> Phase 2("검증 루프") 설계 초안 중 §14.3(계정 불필요 항목)은 구현되어 §2.1 #4로 승격되었다.
+> §14.4(빌더 계정 필요 항목)의 기술 설계는 §10에 별도로 정리되어 있으며, 아직 구현되지 않았다.
+> §10이 실제 반영되기 전까지는 위 Out of Scope 항목이 그대로 유효하다.
 
 ## 3. 기술 스택
 1. **Frontend**: TypeScript + Vite, 순수 DOM 조작(프레임워크 없음), `fetch`로 API 호출.
@@ -81,6 +84,16 @@ flowchart LR
 10. 랜딩/결과 화면의 "🏆 가장 많이 선택된 서비스 랭킹" 버튼은 `#ranking` 화면을 열고
     `GET /api/services/ranking`을 호출해 순위를 렌더링한다. 집계가 없으면 안내 문구를 보여주고,
     "뒤로 가기"는 랭킹을 열었던 화면(랜딩 또는 결과)으로 돌아간다.
+11. **스와이프 이유 마이크로 피드백**(Phase 2 §14.3 승격): `decide('dislike')` 직후
+    `showReasonToast()`가 카드 화면 하단에 `#reason-toast`(이유 태그 4개 + 건너뛰기 ×)를 띄운다.
+    이유 태그 클릭 시 `card_dislike` 이벤트를 `metadata: {serviceId, reason, stage:'reason_tag'}`로
+    추가 전송하고(원래 스와이프 시점에 보낸 `card_dislike` 이벤트와는 별개), 건너뛰기 또는 4초
+    타임아웃이면 전송 없이 닫힌다. 토스트가 떠 있는 동안에도 다음 카드 스와이프는 그대로 가능하다.
+12. **미리보기 재체험 의향 질문**(Phase 2 §14.3 승격): 미리보기 닫기 버튼/Escape는 바로 닫지 않고
+    `requestClosePreview()`가 먼저 `#retry-intent`("다시 써보고 싶나요?" 예/아니오/글쎄요 +
+    건너뛰고 닫기)를 보여준다. 응답 시 `answerRetryIntent()`가 `service_click` 이벤트를
+    `metadata: {serviceId, mode:'embed', stage:'preview_close', retryIntent}`로 추가 전송한 뒤
+    닫고, 건너뛰기 또는 6초 타임아웃이면 응답 없이 닫힌다.
 
 ### 5.2 백엔드 API (`apps/api/src/server.ts`)
 1. `GET /health` — 컨테이너 헬스체크용 상태 엔드포인트.
@@ -91,9 +104,19 @@ flowchart LR
    `card_skip`, `card_undo`, `service_click`, `result_view`, `email_submit`, `service_feedback_submit`)를
    Zod로 검증 후 인메모리 배열에 적재(최대 5000건, 초과 시 오래된 항목부터 제거). `service_feedback_submit`은
    `metadata.serviceId`(필수 문자열), `metadata.rating`(필수, 1~5 정수), `metadata.comment`(선택,
-   최대 300자 문자열)를 `superRefine`으로 추가 검증한다.
+   최대 300자 문자열)를 `superRefine`으로 추가 검증한다. `card_dislike`의 `metadata.reason`/
+   `metadata.stage`, `service_click`의 `metadata.retryIntent`/`metadata.stage`는 기존
+   `metadata: z.record(...)`이 임의 키를 허용하므로 스키마 변경 없이 수용된다.
 4. `POST /api/email-leads` — 이메일 형식 검증(Zod) + 소문자 정규화 + 중복 등록 거부(409).
-5. `GET /api/services/ranking` — `events` 배열에서 `card_like` 이벤트를 `metadata.serviceId` 기준으로
+5. `GET /api/services/funnel`(Phase 2 §14.3 승격) — `events` 배열을 서비스 ID 기준으로 재집계해
+   서비스별 노출(관심 있음+관심 없음+건너뛰기 합)/관심 있음/관심 없음/건너뛰기/미리보기 클릭 수,
+   이유 태그 분포(`dislikeReasons`), 재체험 의향 분포(`retryIntent: {yes,no,unsure}`)를 반환한다.
+   `metadata.stage === 'reason_tag'`인 `card_dislike`와 `metadata.stage === 'preview_close'`인
+   `service_click`은 각각 이유 태그/재체험 의향 집계에만 쓰이고 기본 카운트(`dislikes`/
+   `previewClicks`)에는 포함하지 않아 이중 집계를 막는다. 노출 또는 미리보기 클릭이 1회 이상인
+   서비스만, 노출 수 내림차순으로 반환한다. 새 영속 저장소 없이 기존 인메모리 이벤트 배열만
+   재사용한다(§6.3).
+6. `GET /api/services/ranking` — `events` 배열에서 `card_like` 이벤트를 `metadata.serviceId` 기준으로
    집계하고, 선택 횟수가 1회 이상인 서비스를 내림차순 정렬해 상위 `RANKING_LIMIT`(20)개를
    `{id, name, tagline, serviceUrl, likeCount}` 형태로 반환한다. 헬스체크 통과 여부와 무관하게
    역대 누적 집계를 보여준다(별도 영속 저장소 없이 기존 인메모리 이벤트 스토어를 재사용).
@@ -137,6 +160,13 @@ type FunnelEvent = { name: EventName; sessionId: string; metadata: Record<string
 현재 다른 퍼널 이벤트와 동일한 인메모리 배열에 저장되며, §10 향후 확장(서비스 소유자 피드백 포털)을
 위한 원시 데이터 역할을 한다.
 
+`card_dislike`는 두 가지 형태로 쓰인다: 스와이프 시점의 기본 이벤트(`{serviceId}`)와, 이유 태그 선택
+시 전송되는 후속 이벤트(`{serviceId, reason, stage:'reason_tag'}`). `service_click`도 마찬가지로
+미리보기 오픈 시점의 기본 이벤트(`{serviceId, mode:'embed'}`)와, 재체험 의향 응답 시 전송되는 후속
+이벤트(`{serviceId, mode:'embed', stage:'preview_close', retryIntent:'yes'|'no'|'unsure'}`)로
+나뉜다. `metadata.stage`는 둘 다 Zod 스키마 변경 없이 기존 `metadata: z.record(...)`로 수용되며,
+`GET /api/services/funnel`이 `stage` 값으로 기본 카운트와 이유/의향 집계를 분리한다(§5.2 #5).
+
 ### 6.4 이메일 리드
 현재는 `Set<string>`(정규화된 이메일 주소)만 보관하며, 가입 시각/동의 여부 등은 저장하지 않는다.
 실데이터 영속화가 필요해지면 DB 테이블 설계가 선행되어야 한다(§2.2 Out of Scope 참고).
@@ -150,6 +180,20 @@ type RankingEntry = { id: string; name: string; tagline: string; serviceUrl: str
 재집계한 값이므로, 프로세스 재시작 시 집계가 초기화된다(§2.2 Out of Scope의 "DB 없음" 전제와 동일한
 trade-off).
 
+### 6.6 퍼널 드롭오프 엔트리 (Phase 2 §14.3 승격)
+```ts
+type FunnelEntry = {
+  id: string; name: string; impressions: number; likes: number; dislikes: number; skips: number;
+  previewClicks: number; dislikeReasons: Record<string, number>;
+  retryIntent: { yes: number; no: number; unsure: number };
+};
+```
+`GET /api/services/funnel`은 §6.5와 마찬가지로 §6.3 이벤트 배열의 실시간 재집계 값이며, 별도
+영속 저장소가 없어 프로세스 재시작 시 초기화된다. `impressions`는 `likes+dislikes+skips`로 계산되며,
+별도의 "카드 노출" 이벤트가 없어 실제 노출이 아니라 스와이프 반응(결정) 수를 근사치로 사용한다.
+
+
+
 ## 7. API 스펙
 
 | 메서드/경로 | 설명 | 검증 | 응답 |
@@ -157,14 +201,17 @@ trade-off).
 | `GET /health` | 컨테이너 헬스체크 | - | `{ status: 'ok', service, timestamp }` |
 | `GET /api/services` | 헬스체크 통과 + 중복 제거된 카탈로그 | - | `{ services: Service[] }` |
 | `GET /api/services/ranking` | 누적 `card_like` 횟수 기준 상위 `RANKING_LIMIT`(20)개 서비스 랭킹 | - | `{ ranking: RankingEntry[] }` |
+| `GET /api/services/funnel` | 서비스별 노출/관심 있음/관심 없음/건너뛰기/미리보기 클릭/이유 태그/재체험 의향 집계 | - | `{ funnel: FunnelEntry[] }` |
 | `POST /api/events` | 퍼널 이벤트 적재 | Zod(`eventSchema`) | `202 { accepted: true }` / `400` |
 | `POST /api/email-leads` | 이메일 리드 저장 | Zod(`emailSchema`) | `201` / `409` 중복 / `400` |
 
 CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 시 `*`.
 
 ## 8. 테스트 전략
-- API: Vitest + Supertest. `apps/api/tests/integration.gyro.test.ts`(엔드포인트 통합),
-  `apps/api/tests/unit.health-check.test.ts`(헬스체크 캐시/폴백/테스트 환경 단축 경로).
+- API: Vitest + Supertest. `apps/api/tests/integration.gyro.test.ts`(엔드포인트 통합, `card_dislike`/
+  `service_click`의 `reason`/`retryIntent` 후속 이벤트 수락과 `GET /api/services/funnel` 집계
+  이중 집계 방지 포함), `apps/api/tests/unit.health-check.test.ts`(헬스체크 캐시/폴백/테스트 환경
+  단축 경로).
 - Web: Vitest + jsdom. `apps/web/tests/catalog-load.unit.test.ts`(시작 버튼 경쟁 조건 가드),
   `apps/web/tests/match-score.unit.test.ts`(`matchScore`/`matchedInterestTags` 가중치 분리 검증).
 - 모든 테스트는 `NODE_ENV=test`에서 외부 네트워크 호출 없이 동작해야 한다.
@@ -175,22 +222,25 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
    않도록 한다.
 3. 이벤트 저장소는 최대 5000건으로 제한해 메모리 누수를 방지한다.
 
-## 10. Phase 2 — "검증 루프" 기술 설계 초안 (미구현)
+## 10. Phase 2 — "검증 루프" 기술 설계 초안 (§10.1 구현 완료, §10.2 이후 미구현)
 
-> `prd.md` §14의 요구사항 초안에 대응하는 기술 설계 초안이다. §2(범위)·§6(데이터 모델)·§7(API 스펙)은
-> Phase 1(현재 배포된 MVP)만을 반영하며, 이 섹션은 **아직 구현되지 않았다.** 착수 시 해당 설계를
-> §2~§7로 승격하고 이 섹션은 제거(또는 "완료"로 표시)한다.
+> `prd.md` §14의 요구사항 초안에 대응하는 기술 설계 초안이다. §10.1(§14.3, 계정 불필요)은
+> **구현 완료**되어 §2.1/§5.1/§5.2/§6.3/§6.6/§7로 승격되었다(이 하위 섹션은 구현 기록으로 유지).
+> §10.2(§14.4, 빌더 계정 필요) 이후는 여전히 **미구현**이다. 착수 시 해당 설계를 §2~§7로 승격하고
+> 이 섹션은 제거(또는 "완료"로 표시)한다.
 
-### 10.1 §14.3 (계정 불필요) — API 스키마 변경 없이 수용 가능
+### 10.1 §14.3 (계정 불필요) — API 스키마 변경 없이 수용 가능 — ✅ 구현 완료
 - `card_dislike` 이벤트의 `metadata`에 `reason?: string` 필드를 추가한다. `eventSchema`의
   `metadata: z.record(z.string(), z.unknown()).optional()`이 이미 임의 키를 허용하므로 **Zod 스키마
-  변경이 필요 없다.** 프론트엔드에서 허용 가능한 `reason` 값 집합(예: `'unclear' | 'not_relevant' |
-  'bad_design' | 'already_used'`)만 상수로 정의해 전송하면 된다.
+  변경이 필요 없다.** 프론트엔드에서 허용 가능한 `reason` 값 집합(`'unclear' | 'not_relevant' |
+  'bad_design' | 'already_used'`)만 상수로 정의해 전송한다(`apps/web/src/app.ts`의
+  `DISLIKE_REASONS`). 이중 집계를 막기 위해 `metadata.stage: 'reason_tag'`도 함께 보낸다.
 - `service_click` 이벤트의 `metadata`에 `retryIntent?: 'yes' | 'no' | 'unsure'` 필드를 추가한다
-  (동일하게 스키마 변경 불필요).
+  (동일하게 스키마 변경 불필요), `metadata.stage: 'preview_close'`로 기본 미리보기-클릭 이벤트와
+  구분한다.
 - 퍼널 드롭오프 집계는 `GET /api/services/ranking`과 유사하게 기존 `events` 배열을 서비스별로
-  재집계하는 **읽기 전용 신규 엔드포인트** `GET /api/services/funnel`(가칭)로 제공 가능 — 역시
-  새 저장소 없이 기존 인메모리 이벤트 스토어만 재사용한다.
+  재집계하는 읽기 전용 엔드포인트 `GET /api/services/funnel`로 구현했다 — 새 저장소 없이 기존
+  인메모리 이벤트 스토어만 재사용한다(§5.2 #5, §6.6).
 
 ### 10.2 §14.4 (빌더 계정 필요) — 아키텍처 전제 변경 필요
 - **인증**: 빌더 인증 방식은 미확정(매직링크 이메일 / GitHub OAuth / 바이브벤처 기관 발급 코드 등
@@ -238,15 +288,16 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
   유료 기능이므로 범위상 구분된다.
 
 ### 10.3 테스트 전략 확장(초안)
-- §10.1 항목은 기존 `integration.gyro.test.ts` 패턴을 그대로 따라 `metadata.reason`/
-  `metadata.retryIntent` 포함 이벤트가 `202`로 수락되는지, 신규 집계 엔드포인트가 올바른 형태를
-  반환하는지 테스트를 추가한다(스키마 변경이 없으므로 기존 Zod 검증 테스트는 그대로 유효).
+- §10.1 항목 — ✅ 구현 완료. `integration.gyro.test.ts`에 `metadata.reason`/`metadata.retryIntent`
+  포함 후속 이벤트가 `202`로 수락되는지, `GET /api/services/funnel`이 `stage` 태그로 기본 카운트와
+  이유/의향 집계를 분리(이중 집계 방지)하는지 검증하는 테스트를 추가했다(스키마 변경이 없어 기존
+  Zod 검증 테스트는 그대로 유효).
 - §10.2 항목은 영속 저장소(DB) 도입이 선행되어야 하므로, 테스트 전략도 그때 함께 설계한다(예:
   테스트용 임시 DB 파일/인메모리 SQLite 등 — 현재는 미확정).
 
 ### 10.4 롤아웃 순서 제안
-1. §10.1(API 확장 없음) → 프론트엔드 UI만 추가, 가장 낮은 리스크.
-2. §10.1의 `GET /api/services/funnel` 신규 엔드포인트 추가.
+1. ✅ §10.1(API 확장 없음) → 프론트엔드 UI만 추가, 가장 낮은 리스크. (완료)
+2. ✅ §10.1의 `GET /api/services/funnel` 신규 엔드포인트 추가. (완료)
 3. §10.2 착수 전 ADR 작성: 인증 방식 확정, DB 선택, 기존 "DB 없음" 전제를 깨는 것에 대한 합의.
 4. §10.2 빌더 대시보드 최소 버전(읽기 전용 요약 + 피드백 피드) 구현.
 5. 검증 배지, A/B 카드 테스트, 버전 이력 비교는 대시보드 안정화 후 순차 추가.

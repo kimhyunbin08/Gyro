@@ -121,6 +121,70 @@ export function createApp() {
     res.json({ services });
   });
 
+  // prd.md §14.3 / trd.md §10.1 (Phase 2 draft): aggregate per-service
+  // funnel drop-off for builders, purely from existing in-memory events —
+  // no new event names or schema changes. "Reacted" (like+dislike+skip)
+  // stands in for impressions since there is no separate card-view event.
+  // Reason-tag and retry-intent follow-up events carry metadata.stage so
+  // they don't double-count the primary card_dislike / preview-click events.
+  app.get('/api/services/funnel', (_req, res) => {
+    const stats = new Map<
+      string,
+      { likes: number; dislikes: number; skips: number; previewClicks: number; dislikeReasons: Record<string, number>; retryIntent: { yes: number; no: number; unsure: number } }
+    >();
+    const entry = (serviceId: string) => {
+      let s = stats.get(serviceId);
+      if (!s) {
+        s = { likes: 0, dislikes: 0, skips: 0, previewClicks: 0, dislikeReasons: {}, retryIntent: { yes: 0, no: 0, unsure: 0 } };
+        stats.set(serviceId, s);
+      }
+      return s;
+    };
+    for (const event of events) {
+      const serviceId = event.metadata.serviceId;
+      if (typeof serviceId !== 'string') continue;
+      if (event.name === 'card_like') entry(serviceId).likes++;
+      else if (event.name === 'card_dislike') {
+        if (event.metadata.stage === 'reason_tag') {
+          const reason = event.metadata.reason;
+          if (typeof reason === 'string') {
+            const s = entry(serviceId);
+            s.dislikeReasons[reason] = (s.dislikeReasons[reason] || 0) + 1;
+          }
+        } else {
+          entry(serviceId).dislikes++;
+        }
+      } else if (event.name === 'card_skip') entry(serviceId).skips++;
+      else if (event.name === 'service_click' && event.metadata.mode === 'embed') {
+        if (event.metadata.stage === 'preview_close') {
+          const retryIntent = event.metadata.retryIntent;
+          if (retryIntent === 'yes' || retryIntent === 'no' || retryIntent === 'unsure') entry(serviceId).retryIntent[retryIntent]++;
+        } else {
+          entry(serviceId).previewClicks++;
+        }
+      }
+    }
+    const funnel = dedupedCatalog
+      .map((service) => {
+        const s = stats.get(service.id);
+        const impressions = (s?.likes || 0) + (s?.dislikes || 0) + (s?.skips || 0);
+        return {
+          id: service.id,
+          name: service.name,
+          impressions,
+          likes: s?.likes || 0,
+          dislikes: s?.dislikes || 0,
+          skips: s?.skips || 0,
+          previewClicks: s?.previewClicks || 0,
+          dislikeReasons: s?.dislikeReasons || {},
+          retryIntent: s?.retryIntent || { yes: 0, no: 0, unsure: 0 },
+        };
+      })
+      .filter((entry) => entry.impressions > 0 || entry.previewClicks > 0)
+      .sort((a, b) => b.impressions - a.impressions);
+    res.json({ funnel });
+  });
+
   // Aggregates anonymous 'card_like' (right-swipe) events by serviceId so
   // visitors can see which services the community has found most
   // interesting so far. Purely derived from in-memory event counts; no
