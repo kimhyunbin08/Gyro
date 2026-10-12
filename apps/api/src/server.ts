@@ -13,7 +13,8 @@ type EventName =
   | 'card_undo'
   | 'service_click'
   | 'result_view'
-  | 'email_submit';
+  | 'email_submit'
+  | 'service_feedback_submit';
 
 type Service = {
   id: string;
@@ -29,11 +30,40 @@ type Service = {
 
 const events: Array<{ name: EventName; sessionId: string; metadata: Record<string, unknown>; createdAt: string }> = [];
 const emailLeads = new Set<string>();
-const eventSchema = z.object({
-  name: z.enum(['landing_view', 'profile_submit', 'card_like', 'card_dislike', 'card_skip', 'card_undo', 'service_click', 'result_view', 'email_submit']),
-  sessionId: z.string().min(8).max(100),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-});
+const eventSchema = z
+  .object({
+    name: z.enum([
+      'landing_view',
+      'profile_submit',
+      'card_like',
+      'card_dislike',
+      'card_skip',
+      'card_undo',
+      'service_click',
+      'result_view',
+      'email_submit',
+      'service_feedback_submit',
+    ]),
+    sessionId: z.string().min(8).max(100),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  // 결과 화면의 익명 별점+코멘트 피드백은 일반 퍼널 이벤트와 같은 경로(POST /api/events)로
+  // 들어오지만, 추후 소유자용 피드백 집계가 가능하도록 metadata 형태를 별도 검증한다.
+  .superRefine((data, ctx) => {
+    if (data.name !== 'service_feedback_submit') return;
+    const metadata = data.metadata ?? {};
+    if (typeof metadata.serviceId !== 'string' || metadata.serviceId.length === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'serviceId가 필요합니다.', path: ['metadata', 'serviceId'] });
+    }
+    const rating = metadata.rating;
+    if (typeof rating !== 'number' || !Number.isInteger(rating) || rating < 1 || rating > 5) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'rating은 1~5 사이 정수여야 합니다.', path: ['metadata', 'rating'] });
+    }
+    const comment = metadata.comment;
+    if (comment !== undefined && (typeof comment !== 'string' || comment.length > 300)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'comment는 300자 이하 문자열이어야 합니다.', path: ['metadata', 'comment'] });
+    }
+  });
 const emailSchema = z.object({
   email: z.string().trim().email().max(254),
   updatesOptIn: z.boolean(),

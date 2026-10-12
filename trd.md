@@ -52,6 +52,11 @@ flowchart LR
    카드 렌더링 시 `recommendationReason()`이 같은 신호로 한 줄 추천 이유를 만든다.
 5. 라운드 배칭: `BATCH_SIZE = 10`. `startBatch()`가 `batchStart`/`batchEnd`를 갱신하고,
    `finishBatch()`가 남은 서비스 유무에 따라 결과 화면 문구/다음 라운드 버튼을 분기한다.
+6. 결과 화면 피드백: `finishBatch()`가 관심 표시 서비스(`liked`)마다 `feedbackWidgetHtml()`로 별점
+   5개(`.feedback-star`) + 코멘트 입력(`.feedback-comment`, `maxlength=300`) + 전송 버튼을 렌더링하고,
+   `bindFeedbackWidgets()`가 서비스별로 로컬 `rating` 상태를 들고 있다가 전송 버튼 클릭 시
+   `POST /api/events`(`name: 'service_feedback_submit'`)를 호출한다. 로그인/계정 없이 세션 ID만
+   포함한다.
 
 ### 5.2 백엔드 API (`apps/api/src/server.ts`)
 1. `GET /health` — 컨테이너 헬스체크용 상태 엔드포인트.
@@ -59,8 +64,10 @@ flowchart LR
    대해 `checkServiceHealth()`로 실시간 접속 가능 여부를 확인하고, 실패한 서비스를 제외한 목록을
    반환한다.
 3. `POST /api/events` — 퍼널 이벤트(`landing_view`, `profile_submit`, `card_like`, `card_dislike`,
-   `card_skip`, `card_undo`, `service_click`, `result_view`, `email_submit`)를 Zod로 검증 후
-   인메모리 배열에 적재(최대 5000건, 초과 시 오래된 항목부터 제거).
+   `card_skip`, `card_undo`, `service_click`, `result_view`, `email_submit`, `service_feedback_submit`)를
+   Zod로 검증 후 인메모리 배열에 적재(최대 5000건, 초과 시 오래된 항목부터 제거). `service_feedback_submit`은
+   `metadata.serviceId`(필수 문자열), `metadata.rating`(필수, 1~5 정수), `metadata.comment`(선택,
+   최대 300자 문자열)를 `superRefine`으로 추가 검증한다.
 4. `POST /api/email-leads` — 이메일 형식 검증(Zod) + 소문자 정규화 + 중복 등록 거부(409).
 
 ### 5.3 헬스체크 서비스 (`apps/api/src/services/health-check.service.ts`)
@@ -93,9 +100,14 @@ type Service = CatalogService & { health: { status: 'healthy' | 'unhealthy'; che
 ```ts
 type EventName =
   | 'landing_view' | 'profile_submit' | 'card_like' | 'card_dislike'
-  | 'card_skip' | 'card_undo' | 'service_click' | 'result_view' | 'email_submit';
+  | 'card_skip' | 'card_undo' | 'service_click' | 'result_view' | 'email_submit'
+  | 'service_feedback_submit';
 type FunnelEvent = { name: EventName; sessionId: string; metadata: Record<string, unknown>; createdAt: string };
 ```
+`service_feedback_submit`의 `metadata`는 `{ serviceId: string; rating: 1|2|3|4|5; comment?: string }`
+형태를 따르며, 서버는 `rating`이 1~5 정수인지, `comment`가 300자 이하인지 추가 검증한다. 이 이벤트는
+현재 다른 퍼널 이벤트와 동일한 인메모리 배열에 저장되며, §10 향후 확장(서비스 소유자 피드백 포털)을
+위한 원시 데이터 역할을 한다.
 
 ### 6.4 이메일 리드
 현재는 `Set<string>`(정규화된 이메일 주소)만 보관하며, 가입 시각/동의 여부 등은 저장하지 않는다.
@@ -123,3 +135,13 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
 2. 헬스체크 타임아웃은 4초로 제한해 느린/죽은 서비스가 `/api/services` 응답 전체를 지연시키지
    않도록 한다.
 3. 이벤트 저장소는 최대 5000건으로 제한해 메모리 누수를 방지한다.
+
+## 10. 향후 확장 로드맵 (Out of Scope, 미구현)
+- **서비스 소유자 피드백 포털**: 바이브벤처 참가 학생/스타트업이 회원가입/로그인 후 자신의 서비스에
+  쌓인 `service_feedback_submit` 이벤트(별점·코멘트)를 열람하는 화면. 구현 시 §2.2(로그인/계정
+  영속화)가 In Scope로 이동해야 하며, 사용자 인증, 이메일/비밀번호 또는 OAuth, 소유자-서비스
+  매핑, 권한 분리된 조회 API(`GET /api/owners/.../feedback` 등) 설계가 선행되어야 한다.
+- **유료 "서비스 개선방안" 피드백**: 단순 원시 피드백 열람은 무료, 정성 분석·우선순위 제안 리포트는
+  유료 티어로 제공하는 방안을 검토한다(결제 연동은 §2.2 Out of Scope 유지, 과금 체계는
+  `BUSINESS.md` §5.4 참고).
+- 이 섹션은 문서화 전용이며, 현재 저장소에는 구현하지 않는다.

@@ -134,12 +134,50 @@ function renderCard(){
 }
 function decide(action:'like'|'dislike'|'skip'){if(index>=batchEnd)return;const service=services[index++];history.push({service,action});if(action==='like')liked.push(service);track(action==='like'?'card_like':action==='dislike'?'card_dislike':'card_skip',{serviceId:service.id});renderCard();}
 function undo(){const last=history.pop();if(!last||index<=batchStart)return;index--;if(last.action==='like')liked=liked.filter(x=>x.id!==last.service.id);track('card_undo',{serviceId:last.service.id});renderCard();}
+// §PRD 9-?: 한 라운드(스와이프 세션)가 끝나고 결과 화면에 들어선 뒤, 관심 표시한 서비스마다
+// 로그인 없이 별점(1~5)+코멘트를 남길 수 있다. 전송은 기존 익명 퍼널 이벤트 경로를 재사용한다.
+function feedbackWidgetHtml(serviceId:string):string{
+  const stars=[1,2,3,4,5].map(n=>`<button type="button" class="feedback-star" data-star="${n}" aria-label="${n}점">★</button>`).join('');
+  return `<div class="feedback-box" data-feedback-service="${serviceId}"><p class="feedback-label">이 서비스, 어땠나요?</p><div class="feedback-stars" role="group" aria-label="별점">${stars}</div><textarea class="feedback-comment" maxlength="300" placeholder="개선하면 좋을 점이 있다면 알려주세요 (선택)"></textarea><button type="button" class="text-button feedback-submit" disabled>피드백 보내기</button><p class="feedback-message" role="status"></p></div>`;
+}
+function bindFeedbackWidgets(){
+  document.querySelectorAll<HTMLElement>('[data-feedback-service]').forEach(box=>{
+    const serviceId=box.dataset.feedbackService!;
+    const stars=Array.from(box.querySelectorAll<HTMLButtonElement>('.feedback-star'));
+    const submit=box.querySelector<HTMLButtonElement>('.feedback-submit')!;
+    const comment=box.querySelector<HTMLTextAreaElement>('.feedback-comment')!;
+    const message=box.querySelector<HTMLElement>('.feedback-message')!;
+    let rating=0;
+    stars.forEach(star=>{
+      star.onclick=()=>{
+        rating=Number(star.dataset.star);
+        stars.forEach(s=>s.classList.toggle('active',Number(s.dataset.star)<=rating));
+        submit.disabled=false;
+      };
+    });
+    submit.onclick=async()=>{
+      if(rating===0)return;
+      submit.disabled=true;
+      try{
+        const r=await fetch(`${API}/api/events`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'service_feedback_submit',sessionId,metadata:{serviceId,rating,comment:comment.value.trim().slice(0,300)}})});
+        if(!r.ok)throw new Error();
+        message.textContent='피드백 감사해요!';
+        stars.forEach(s=>s.disabled=true);
+        comment.disabled=true;
+      }catch{
+        message.textContent='전송에 실패했어요. 다시 시도해주세요.';
+        submit.disabled=false;
+      }
+    };
+  });
+}
 function finishBatch(){
   const remaining = services.length - index;
   track('result_view',{likedCount:liked.length,remaining});
   show('results');
-  $('result-list').innerHTML=liked.length?liked.map(s=>`<article class="result-item"><img src="${s.imageUrl}" alt=""><div><h3>${s.name}</h3><p>${s.tagline}</p><a href="${s.serviceUrl}" target="_blank" rel="noreferrer" data-service="${s.id}">서비스 열어보기 →</a></div></article>`).join(''):'<p class="lede">아직 관심 표시한 서비스가 없어요. 다시 둘러보며 새로운 가능성을 찾아보세요.</p>';
+  $('result-list').innerHTML=liked.length?liked.map(s=>`<article class="result-item"><div class="result-main"><img src="${s.imageUrl}" alt=""><div><h3>${s.name}</h3><p>${s.tagline}</p><a href="${s.serviceUrl}" target="_blank" rel="noreferrer" data-service="${s.id}">서비스 열어보기 →</a></div></div>${feedbackWidgetHtml(s.id)}</article>`).join(''):'<p class="lede">아직 관심 표시한 서비스가 없어요. 다시 둘러보며 새로운 가능성을 찾아보세요.</p>';
   document.querySelectorAll<HTMLAnchorElement>('[data-service]').forEach(a=>a.onclick=()=>track('service_click',{serviceId:a.dataset.service}));
+  bindFeedbackWidgets();
   const continueButton = $<HTMLButtonElement>('continue-button');
   if (remaining > 0) {
     $('results-eyebrow').textContent = '중간 결과';
