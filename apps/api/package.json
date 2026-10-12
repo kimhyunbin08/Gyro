@@ -1,5 +1,5 @@
 {
-  "name": "@luggy/api",
+  "name": "@gyro/api",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -8,30 +8,20 @@
     "test:watch": "vitest",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "dev": "tsx src/dev.ts",
-    "dev:db": "ts-node src/server.ts",
-    "db:init": "node dist/scripts/init-db.js",
-    "db:migrate": "psql $DATABASE_URL -f schema.sql"
+    "dev": "tsx src/dev.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@azure/storage-blob": "^12.33.0",
     "express": "^5.2.1",
-    "multer": "^2.2.0",
-    "pg": "^8.12.0",
-    "uuid": "^10.0.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
-    "@types/multer": "^2.2.0",
     "@types/node": "^26.2.0",
-    "@types/pg": "^8.12.2",
     "@types/supertest": "^7.2.1",
-    "@types/uuid": "^10.0.0",
     "supertest": "^7.2.2",
     "tsx": "^4.23.12"
   }

@@ -71,25 +71,25 @@ jobs:
       - name: Build & push API image (ACR Tasks)
         run: |
           az acr build --registry "$ACR_NAME" \
-            --image "luggy/api-production:${{ github.sha }}" \
+            --image "gyro/api-production:${{ github.sha }}" \
             --file apps/api/Dockerfile .
 
       - name: Build & push Web image (ACR Tasks)
         run: |
           az acr build --registry "$ACR_NAME" \
-            --image "luggy/web-production:${{ github.sha }}" \
+            --image "gyro/web-production:${{ github.sha }}" \
             --file apps/web/Dockerfile \
             --build-arg VITE_API_URL="$API_URL" .
 
       - name: Deploy API revision
         run: |
           az containerapp update -n "$API_APP" -g "$RESOURCE_GROUP" \
-            --image "$ACR_LOGIN_SERVER/luggy/api-production:${{ github.sha }}"
+            --image "$ACR_LOGIN_SERVER/gyro/api-production:${{ github.sha }}"
 
       - name: Deploy Web revision
         run: |
           az containerapp update -n "$WEB_APP" -g "$RESOURCE_GROUP" \
-            --image "$ACR_LOGIN_SERVER/luggy/web-production:${{ github.sha }}"
+            --image "$ACR_LOGIN_SERVER/gyro/web-production:${{ github.sha }}"
 
   deploy-production:
     needs: build
@@ -119,22 +119,22 @@ jobs:
       - name: Build & push API image (ACR Tasks)
         run: |
           az acr build --registry "$ACR_NAME" \
-            --image "luggy/api-production:${{ github.sha }}" \
+            --image "gyro/api-production:${{ github.sha }}" \
             --file apps/api/Dockerfile .
 
       - name: Build & push Web image (ACR Tasks)
         run: |
           az acr build --registry "$ACR_NAME" \
-            --image "luggy/web-production:${{ github.sha }}" \
+            --image "gyro/web-production:${{ github.sha }}" \
             --file apps/web/Dockerfile \
             --build-arg VITE_API_URL="$API_URL" .
 
       - name: Deploy API revision
         run: |
           az containerapp update -n "$API_APP" -g "$RESOURCE_GROUP" \
-            --image "$ACR_LOGIN_SERVER/luggy/api-production:${{ github.sha }}"
+            --image "$ACR_LOGIN_SERVER/gyro/api-production:${{ github.sha }}"
 
       - name: Deploy Web revision
         run: |
           az containerapp update -n "$WEB_APP" -g "$RESOURCE_GROUP" \
-            --image "$ACR_LOGIN_SERVER/luggy/web-production:${{ github.sha }}"
+            --image "$ACR_LOGIN_SERVER/gyro/web-production:${{ github.sha }}"
