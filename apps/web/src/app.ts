@@ -22,6 +22,24 @@ const sessionId = crypto.randomUUID();
 // shown in rounds of BATCH_SIZE; each round ends on an interim results
 // screen that offers to continue with the next round.
 const BATCH_SIZE = 10;
+// Recommendation weighting: each matched interest tag counts for
+// INTEREST_WEIGHT, the single selected audience/type match counts for
+// AUDIENCE_WEIGHT. Audience gets the heavier weight because it's one
+// deliberate, specific choice ("나는 교사다") versus many possible interest
+// tags, so a single audience match should be able to outweigh one matched
+// interest tag while still losing to multiple matched interests. Rounds
+// (BATCH_SIZE cards) are then cut from this single score-sorted deck, so
+// round 1 is always the user's best-matching batch, round 2 the next, etc.
+export const INTEREST_WEIGHT = 2;
+export const AUDIENCE_WEIGHT = 3;
+export function matchedInterestTags(service: Service, interests: ReadonlySet<string>): string[] {
+  return service.tags.filter((t) => interests.has(t));
+}
+export function matchScore(service: Service, audience: Audience | null, interests: ReadonlySet<string>): number {
+  const matchedTags = matchedInterestTags(service, interests).length;
+  const audienceMatch = audience !== null && service.audiences.includes(audience);
+  return matchedTags * INTEREST_WEIGHT + (audienceMatch ? AUDIENCE_WEIGHT : 0);
+}
 let services: Service[] = [], index = 0, batchStart = 0, batchEnd = 0, liked: Service[] = [], history: Array<{service:Service; action:'like'|'dislike'|'skip'}> = [];
 let audience: Audience | null = null, interests = new Set<string>();
 const $ = <T extends HTMLElement>(id:string) => document.getElementById(id) as T;
@@ -115,7 +133,7 @@ function bindWheelGestures(card:HTMLElement){
 // §26.3/§26.6.7: every card shows at least one explainable reason, derived
 // from the same tag/audience overlap used to rank the deck in profile-next.
 function recommendationReason(service: Service): string {
-  const matchedTags = service.tags.filter((t) => interests.has(t));
+  const matchedTags = matchedInterestTags(service, interests);
   const audienceMatch = audience && service.audiences.includes(audience);
   if (matchedTags.length > 0) return `"${matchedTags[0]}" 관심사와 잘 맞아요`;
   if (audienceMatch) return '선택하신 유형에게 인기 있어요';
@@ -222,7 +240,7 @@ async function load(){
 // 0/0. Disable the button until the catalog is ready (or failed) instead.
 startButton.disabled=true;startButton.textContent='불러오는 중...';
 $('start-button').onclick=()=>{if(services.length===0)return;show('profile');renderChoices();};
-$('profile-next').onclick=()=>{services=[...services].sort((a,b)=>(b.tags.filter(t=>interests.has(t)).length+(b.audiences.includes(audience!)?1:0))-(a.tags.filter(t=>interests.has(t)).length+(a.audiences.includes(audience!)?1:0)));track('profile_submit',{audience,interests:[...interests]});startBatch();show('cards');renderCard();};
+$('profile-next').onclick=()=>{services=[...services].sort((a,b)=>matchScore(b,audience,interests)-matchScore(a,audience,interests));track('profile_submit',{audience,interests:[...interests]});startBatch();show('cards');renderCard();};
 function triggerDecision(action:'like'|'dislike'){ if(index>=batchEnd)return; const card=$('swipe-stage').querySelector<HTMLElement>('.service-card'); if(card) flyOutCard(card, action, () => decide(action)); else decide(action); }
 $('like-button').onclick=()=>triggerDecision('like');$('reject-button').onclick=()=>triggerDecision('dislike');$('undo-button').onclick=undo;$('swipe-stage').onkeydown=e=>{if(e.key==='ArrowRight')triggerDecision('like');if(e.key==='ArrowLeft')triggerDecision('dislike');if(e.key.toLowerCase()==='u')undo();};
 $('continue-button').onclick=()=>{startBatch();show('cards');renderCard();};
