@@ -41,4 +41,39 @@ describe('checkServiceHealth', () => {
     expect(result.status).toBe('healthy');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('serves a stale cache entry immediately past the TTL instead of blocking on a new live check', async () => {
+    process.env.NODE_ENV = 'production';
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+      const { checkServiceHealth, clearHealthCheckCacheForTests } = await import(
+        '../src/services/health-check.service.js'
+      );
+      clearHealthCheckCacheForTests();
+
+      const first = await checkServiceHealth('https://stale-after-ttl.example');
+      expect(first.status).toBe('healthy');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      // Advance past the 10-minute TTL so the cache entry is expired.
+      vi.advanceTimersByTime(11 * 60 * 1000);
+      fetchMock.mockResolvedValue({ ok: false, status: 503 });
+
+      const second = await checkServiceHealth('https://stale-after-ttl.example');
+      // The expired-but-stale value is returned synchronously (no new network
+      // call has resolved yet), proving the call didn't block on a live check.
+      expect(second.status).toBe('healthy');
+
+      // Let the background refresh (kicked off as a microtask) settle.
+      await vi.runAllTimersAsync();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+
+      const third = await checkServiceHealth('https://stale-after-ttl.example');
+      expect(third.status).toBe('unhealthy');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
