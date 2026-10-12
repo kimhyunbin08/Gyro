@@ -21,6 +21,17 @@ describe('Gyro discovery API', () => {
     expect(rejected.status).toBe(400);
   });
 
+  it('accepts service feedback metadata and rejects invalid ratings', async () => {
+    const accepted = await request(app)
+      .post('/api/events')
+      .send({ name: 'service_feedback_submit', sessionId: 'session-1234', metadata: { serviceId: 'vibe-study', rating: 5, comment: '좋아요' } });
+    expect(accepted.status).toBe(202);
+    const rejected = await request(app)
+      .post('/api/events')
+      .send({ name: 'service_feedback_submit', sessionId: 'session-1234', metadata: { serviceId: 'vibe-study', rating: 9 } });
+    expect(rejected.status).toBe(400);
+  });
+
   it('stores an email once and rejects duplicates', async () => {
     const email = `test-${Date.now()}@example.com`;
     expect((await request(app).post('/api/email-leads').send({ email, updatesOptIn: false })).status).toBe(201);
