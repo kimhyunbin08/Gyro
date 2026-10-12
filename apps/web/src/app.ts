@@ -154,24 +154,36 @@ function finishBatch(){
     continueButton.classList.add('hidden');
   }
 }
+const startButton = $<HTMLButtonElement>('start-button');
+const startButtonDefaultText = startButton.textContent ?? '';
 // §26.4.6: an empty catalog (all exhibits currently unreachable) must show a
 // "preparing/try again" state instead of silently letting the user swipe
 // through zero cards into a misleading "all done" results screen.
-function disableStart(label:string){const btn=$<HTMLButtonElement>('start-button');btn.textContent=label;btn.setAttribute('disabled','');}
 async function load(){
   try{
     const response=await fetch(`${API}/api/services`);
     if(!response.ok)throw new Error('services');
     const payload=await response.json();
     services=payload.services;
-    if(services.length===0){disableStart('서비스를 준비 중이에요. 잠시 후 다시 시도해주세요');return;}
+    if(services.length===0){
+      startButton.disabled=false;
+      startButton.textContent='서비스를 준비 중이에요. 잠시 후 다시 시도해주세요';
+      return;
+    }
     track('landing_view');
+    startButton.disabled=false;
+    startButton.textContent=startButtonDefaultText;
   }catch{
     services=[];
-    disableStart('서비스를 불러오지 못했어요. 새로고침해주세요');
+    startButton.disabled=false;
+    startButton.textContent='서비스를 불러오지 못했어요';
   }
 }
-$('start-button').onclick=()=>{show('profile');renderChoices();};
+// Fetching the catalog is async, so clicking "발견 시작하기" before it
+// resolves would leave `services` empty and strand the cards screen at
+// 0/0. Disable the button until the catalog is ready (or failed) instead.
+startButton.disabled=true;startButton.textContent='불러오는 중...';
+$('start-button').onclick=()=>{if(services.length===0)return;show('profile');renderChoices();};
 $('profile-next').onclick=()=>{services=[...services].sort((a,b)=>(b.tags.filter(t=>interests.has(t)).length+(b.audiences.includes(audience!)?1:0))-(a.tags.filter(t=>interests.has(t)).length+(a.audiences.includes(audience!)?1:0)));track('profile_submit',{audience,interests:[...interests]});startBatch();show('cards');renderCard();};
 function triggerDecision(action:'like'|'dislike'){ if(index>=batchEnd)return; const card=$('swipe-stage').querySelector<HTMLElement>('.service-card'); if(card) flyOutCard(card, action, () => decide(action)); else decide(action); }
 $('like-button').onclick=()=>triggerDecision('like');$('reject-button').onclick=()=>triggerDecision('dislike');$('undo-button').onclick=undo;$('swipe-stage').onkeydown=e=>{if(e.key==='ArrowRight')triggerDecision('like');if(e.key==='ArrowLeft')triggerDecision('dislike');if(e.key.toLowerCase()==='u')undo();};
