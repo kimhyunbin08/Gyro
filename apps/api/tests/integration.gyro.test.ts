@@ -53,4 +53,35 @@ describe('Gyro discovery API', () => {
     expect(firstIndex).toBeLessThan(secondIndex);
     expect(response.body.ranking.every((r: { likeCount: number }, i: number, arr: { likeCount: number }[]) => i === 0 || arr[i - 1].likeCount >= r.likeCount)).toBe(true);
   });
+
+  // prd.md §14.3 / trd.md §10.1 (Phase 2 draft): dislike-reason tags and
+  // preview retry-intent answers reuse existing event names with extra
+  // metadata, and are aggregated without inflating the primary counts.
+  it('accepts dislike-reason and preview retry-intent follow-up events without a schema change', async () => {
+    const [service] = catalog;
+    const reasonTag = await request(app)
+      .post('/api/events')
+      .send({ name: 'card_dislike', sessionId: 'session-funnel-1', metadata: { serviceId: service.id, reason: 'unclear', stage: 'reason_tag' } });
+    expect(reasonTag.status).toBe(202);
+    const retryIntent = await request(app)
+      .post('/api/events')
+      .send({ name: 'service_click', sessionId: 'session-funnel-1', metadata: { serviceId: service.id, mode: 'embed', stage: 'preview_close', retryIntent: 'yes' } });
+    expect(retryIntent.status).toBe(202);
+  });
+
+  it('aggregates per-service funnel drop-off without double-counting reason/retry-intent follow-ups', async () => {
+    const [, , service] = catalog;
+    const sessionId = 'session-funnel-2';
+    await request(app).post('/api/events').send({ name: 'card_dislike', sessionId, metadata: { serviceId: service.id } });
+    await request(app).post('/api/events').send({ name: 'card_dislike', sessionId, metadata: { serviceId: service.id, reason: 'not_relevant', stage: 'reason_tag' } });
+    await request(app).post('/api/events').send({ name: 'service_click', sessionId, metadata: { serviceId: service.id, mode: 'embed' } });
+    await request(app).post('/api/events').send({ name: 'service_click', sessionId, metadata: { serviceId: service.id, mode: 'embed', stage: 'preview_close', retryIntent: 'no' } });
+    const response = await request(app).get('/api/services/funnel');
+    expect(response.status).toBe(200);
+    const entry = response.body.funnel.find((f: { id: string }) => f.id === service.id);
+    expect(entry.dislikes).toBe(1);
+    expect(entry.previewClicks).toBe(1);
+    expect(entry.dislikeReasons.not_relevant).toBe(1);
+    expect(entry.retryIntent.no).toBe(1);
+  });
 });

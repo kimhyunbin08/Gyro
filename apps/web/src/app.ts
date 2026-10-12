@@ -160,7 +160,41 @@ function renderCard(){
   bindCardGestures(card);
   bindWheelGestures(card);
 }
-function decide(action:'like'|'dislike'|'skip'){if(index>=batchEnd)return;const service=services[index++];history.push({service,action});if(action==='like')liked.push(service);track(action==='like'?'card_like':action==='dislike'?'card_dislike':'card_skip',{serviceId:service.id});renderCard();}
+function decide(action:'like'|'dislike'|'skip'){if(index>=batchEnd)return;const service=services[index++];history.push({service,action});if(action==='like')liked.push(service);track(action==='like'?'card_like':action==='dislike'?'card_dislike':'card_skip',{serviceId:service.id});if(action==='dislike')showReasonToast(service.id);renderCard();}
+// prd.md §14.3 / trd.md §10.1 (Phase 2 draft): optional, skippable 1-tap
+// "why not interested" micro-feedback shown right after a dislike swipe.
+// Sent as a separate card_dislike event tagged metadata.stage='reason_tag'
+// so it doesn't inflate the primary dislike-swipe count used elsewhere.
+const DISLIKE_REASONS: [string, string][] = [['unclear','설명이 이해 안 됨'],['not_relevant','내 상황과 안 맞음'],['bad_design','디자인이 별로'],['already_used','이미 써봄']];
+let reasonToastTimer: number | undefined;
+function showReasonToast(serviceId:string){
+  const toast = document.getElementById('reason-toast');
+  if(!toast) return;
+  window.clearTimeout(reasonToastTimer);
+  toast.dataset.serviceId = serviceId;
+  toast.classList.remove('hidden');
+  reasonToastTimer = window.setTimeout(()=>hideReasonToast(),4000);
+}
+function hideReasonToast(){
+  const toast = document.getElementById('reason-toast');
+  if(!toast) return;
+  window.clearTimeout(reasonToastTimer);
+  toast.classList.add('hidden');
+  delete toast.dataset.serviceId;
+}
+function bindReasonToast(){
+  const toast = document.getElementById('reason-toast');
+  if(!toast) return;
+  toast.innerHTML = `<p>관심 없는 이유가 있다면 알려주세요 (선택)</p><div class="reason-chips">${DISLIKE_REASONS.map(([value,label])=>`<button type="button" class="reason-chip" data-reason="${value}">${label}</button>`).join('')}</div><button type="button" class="reason-skip" id="reason-skip" aria-label="건너뛰기">×</button>`;
+  toast.querySelectorAll<HTMLButtonElement>('[data-reason]').forEach(btn=>{
+    btn.onclick = () => {
+      const serviceId = toast.dataset.serviceId;
+      if(serviceId) track('card_dislike',{serviceId,reason:btn.dataset.reason,stage:'reason_tag'});
+      hideReasonToast();
+    };
+  });
+  document.getElementById('reason-skip')!.onclick = () => hideReasonToast();
+}
 function undo(){const last=history.pop();if(!last||index<=batchStart)return;index--;if(last.action==='like')liked=liked.filter(x=>x.id!==last.service.id);track('card_undo',{serviceId:last.service.id});renderCard();}
 // §PRD 9-?: 한 라운드(스와이프 세션)가 끝나고 결과 화면에 들어선 뒤, 관심 표시한 서비스마다
 // 로그인 없이 별점(1~5)+코멘트를 남길 수 있다. 전송은 기존 익명 퍼널 이벤트 경로를 재사용한다.
@@ -230,12 +264,15 @@ function finishBatch(){
 // "새 탭에서 열기" link and a load timeout that swaps in a text fallback if
 // the frame never finishes loading.
 let previewLoadTimer: number | undefined;
+let previewService: Service | null = null;
 function openPreview(service: Service){
   track('service_click',{serviceId:service.id,mode:'embed'});
+  previewService = service;
   $('preview-title').textContent = service.name;
   $<HTMLAnchorElement>('preview-open-new').href = service.serviceUrl;
   const frame = $<HTMLIFrameElement>('preview-frame');
   const fallback = $('preview-fallback');
+  hideRetryIntent();
   fallback.classList.add('hidden');
   frame.classList.remove('hidden');
   let loaded = false;
@@ -247,10 +284,34 @@ function openPreview(service: Service){
   }, 4000);
   $('preview-overlay').classList.remove('hidden');
 }
+// prd.md §14.3 / trd.md §10.1 (Phase 2 draft): optional single-question
+// "다시 써보고 싶나요?" check when a preview is closed. Sent as a follow-up
+// service_click event tagged metadata.stage='preview_close' so it doesn't
+// double-count the primary preview-open event recorded in openPreview().
+let retryIntentTimer: number | undefined;
+function requestClosePreview(){
+  if (!previewService) { closePreview(); return; }
+  window.clearTimeout(previewLoadTimer);
+  $<HTMLIFrameElement>('preview-frame').classList.add('hidden');
+  $('preview-fallback').classList.add('hidden');
+  $('retry-intent').classList.remove('hidden');
+  window.clearTimeout(retryIntentTimer);
+  retryIntentTimer = window.setTimeout(() => closePreview(), 6000);
+}
+function hideRetryIntent(){
+  $('retry-intent').classList.add('hidden');
+  window.clearTimeout(retryIntentTimer);
+}
+function answerRetryIntent(retryIntent:'yes'|'no'|'unsure'){
+  if (previewService) track('service_click',{serviceId:previewService.id,mode:'embed',stage:'preview_close',retryIntent});
+  closePreview();
+}
 function closePreview(){
+  hideRetryIntent();
   $('preview-overlay').classList.add('hidden');
   window.clearTimeout(previewLoadTimer);
   $<HTMLIFrameElement>('preview-frame').src = 'about:blank';
+  previewService = null;
 }
 // Ranking: aggregated server-side from anonymous 'card_like' (right-swipe)
 // events, so it reflects everyone's choices, not just this session's.
@@ -311,8 +372,11 @@ $('like-button').onclick=()=>triggerDecision('like');$('reject-button').onclick=
 $('continue-button').onclick=()=>{startBatch();show('cards');renderCard();};
 $('restart-button').onclick=()=>{index=0;batchStart=0;batchEnd=0;liked=[];history=[];audience=null;interests.clear();show('landing');};
 $('email-form').onsubmit=async e=>{e.preventDefault();const message=$('email-message');try{const r=await fetch(`${API}/api/email-leads`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$<HTMLInputElement>('email').value,updatesOptIn:$<HTMLInputElement>('updates').checked})});const body=await r.json();if(!r.ok)throw new Error(body.message);message.textContent='결과를 저장했어요.';track('email_submit',{updatesOptIn:$<HTMLInputElement>('updates').checked});}catch(error){message.textContent=error instanceof Error?error.message:'저장에 실패했어요.';}};
-$('preview-close').onclick=closePreview;
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closePreview();});
+$('preview-close').onclick=requestClosePreview;
+document.addEventListener('keydown',e=>{if(e.key==='Escape')requestClosePreview();});
+document.querySelectorAll<HTMLButtonElement>('[data-retry-intent]').forEach(b=>b.onclick=()=>answerRetryIntent(b.dataset.retryIntent as 'yes'|'no'|'unsure'));
+$('retry-intent-skip').onclick=closePreview;
+bindReasonToast();
 $('ranking-link-landing').onclick=()=>openRanking('landing');
 $('ranking-link-results').onclick=()=>openRanking('results');
 $('ranking-back').onclick=closeRanking;
