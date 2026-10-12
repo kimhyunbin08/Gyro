@@ -64,6 +64,9 @@ flowchart LR
    대비해 "새 탭에서 열기" 링크를 항상 노출하고, 로드 타임아웃(약 4초) 시 텍스트 안내로
    대체한다. 카드의 포인터 드래그 핸들러는 미리보기 버튼 클릭을 스와이프 제스처로 오인하지
    않도록 `data-preview` 대상에서는 드래그를 시작하지 않는다.
+9. 랜딩/결과 화면의 "🏆 가장 많이 선택된 서비스 랭킹" 버튼은 `#ranking` 화면을 열고
+   `GET /api/services/ranking`을 호출해 순위를 렌더링한다. 집계가 없으면 안내 문구를 보여주고,
+   "뒤로 가기"는 랭킹을 열었던 화면(랜딩 또는 결과)으로 돌아간다.
 
 ### 5.2 백엔드 API (`apps/api/src/server.ts`)
 1. `GET /health` — 컨테이너 헬스체크용 상태 엔드포인트.
@@ -74,6 +77,10 @@ flowchart LR
    `card_skip`, `card_undo`, `service_click`, `result_view`, `email_submit`)를 Zod로 검증 후
    인메모리 배열에 적재(최대 5000건, 초과 시 오래된 항목부터 제거).
 4. `POST /api/email-leads` — 이메일 형식 검증(Zod) + 소문자 정규화 + 중복 등록 거부(409).
+5. `GET /api/services/ranking` — `events` 배열에서 `card_like` 이벤트를 `metadata.serviceId` 기준으로
+   집계하고, 선택 횟수가 1회 이상인 서비스를 내림차순 정렬해 상위 `RANKING_LIMIT`(20)개를
+   `{id, name, tagline, serviceUrl, likeCount}` 형태로 반환한다. 헬스체크 통과 여부와 무관하게
+   역대 누적 집계를 보여준다(별도 영속 저장소 없이 기존 인메모리 이벤트 스토어를 재사용).
 
 ### 5.3 헬스체크 서비스 (`apps/api/src/services/health-check.service.ts`)
 1. URL당 HEAD 요청을 우선 시도하고, `405`/`501` 응답 시 GET으로 폴백한다.

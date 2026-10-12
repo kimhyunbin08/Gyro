@@ -15,6 +15,8 @@ type EventName =
   | 'result_view'
   | 'email_submit';
 
+const RANKING_LIMIT = 20;
+
 type Service = {
   id: string;
   name: string;
@@ -87,6 +89,26 @@ export function createApp() {
     // §26.6.3: only services that pass a recent health check reach the swipe deck.
     const services = checked.filter((c) => c.health.status === 'healthy').map((c) => ({ ...c.service, health: c.health }));
     res.json({ services });
+  });
+
+  // Aggregates anonymous 'card_like' (right-swipe) events by serviceId so
+  // visitors can see which services the community has found most
+  // interesting so far. Purely derived from in-memory event counts; no
+  // separate persistence layer, consistent with the rest of the event store.
+  app.get('/api/services/ranking', (_req, res) => {
+    const likeCounts = new Map<string, number>();
+    for (const event of events) {
+      if (event.name !== 'card_like') continue;
+      const serviceId = event.metadata.serviceId;
+      if (typeof serviceId !== 'string') continue;
+      likeCounts.set(serviceId, (likeCounts.get(serviceId) || 0) + 1);
+    }
+    const ranking = dedupedCatalog
+      .map((service) => ({ id: service.id, name: service.name, tagline: service.tagline, serviceUrl: service.serviceUrl, likeCount: likeCounts.get(service.id) || 0 }))
+      .filter((entry) => entry.likeCount > 0)
+      .sort((a, b) => b.likeCount - a.likeCount)
+      .slice(0, RANKING_LIMIT);
+    res.json({ ranking });
   });
 
   app.post('/api/events', (req, res) => {

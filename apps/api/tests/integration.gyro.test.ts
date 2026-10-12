@@ -26,4 +26,20 @@ describe('Gyro discovery API', () => {
     expect((await request(app).post('/api/email-leads').send({ email, updatesOptIn: false })).status).toBe(201);
     expect((await request(app).post('/api/email-leads').send({ email, updatesOptIn: true })).status).toBe(409);
   });
+
+  it('ranks services by right-swipe (card_like) count, most-liked first', async () => {
+    const [first, second] = catalog;
+    await request(app).post('/api/events').send({ name: 'card_like', sessionId: 'session-rank-1', metadata: { serviceId: first.id } });
+    await request(app).post('/api/events').send({ name: 'card_like', sessionId: 'session-rank-2', metadata: { serviceId: first.id } });
+    await request(app).post('/api/events').send({ name: 'card_like', sessionId: 'session-rank-3', metadata: { serviceId: second.id } });
+    await request(app).post('/api/events').send({ name: 'card_dislike', sessionId: 'session-rank-4', metadata: { serviceId: second.id } });
+    const response = await request(app).get('/api/services/ranking');
+    expect(response.status).toBe(200);
+    const entry = (id: string) => response.body.ranking.find((r: { id: string }) => r.id === id);
+    expect(entry(first.id).likeCount).toBeGreaterThanOrEqual(2);
+    const firstIndex = response.body.ranking.findIndex((r: { id: string }) => r.id === first.id);
+    const secondIndex = response.body.ranking.findIndex((r: { id: string }) => r.id === second.id);
+    expect(firstIndex).toBeLessThan(secondIndex);
+    expect(response.body.ranking.every((r: { likeCount: number }, i: number, arr: { likeCount: number }[]) => i === 0 || arr[i - 1].likeCount >= r.likeCount)).toBe(true);
+  });
 });

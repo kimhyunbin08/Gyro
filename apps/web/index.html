@@ -16,6 +16,7 @@
           <p class="lede">몇 장의 카드에 반응하면, 지금 바로 써볼 만한 서비스와 활용법을 찾아드려요.</p>
           <button class="button button-dark" id="start-button">발견 시작하기 <span aria-hidden="true">→</span></button>
           <p class="privacy-note">로그인 없이 시작하고, 결과는 이메일 없이도 볼 수 있어요.</p>
+          <button class="text-button" id="ranking-link-landing">🏆 가장 많이 선택된 서비스 랭킹 보기</button>
         </div>
         <div class="hero-art" aria-hidden="true"><div class="orb orb-one"></div><div class="orb orb-two"></div><span>SWIPE<br />TO<br />DISCOVER</span></div>
       </section>
@@ -48,7 +49,19 @@
 
       <section class="shell hidden" id="results" aria-labelledby="results-title">
         <nav class="topbar"><strong class="wordmark">gyro<span>.</span></strong><span class="pill" id="results-pill">YOUR PICKS</span></nav>
-        <div class="narrow"><p class="eyebrow" id="results-eyebrow">발견 완료</p><h2 id="results-title">당신에게 맞는<br /><em>서비스예요.</em></h2><p class="lede" id="results-lede">관심 표시한 서비스를 먼저 모았어요. 바로 열어보고, 쓸모를 발견해보세요.</p><div id="result-list"></div><button class="button button-dark full hidden" id="continue-button">다음 10개 더 보기 <span aria-hidden="true">→</span></button><div class="email-box"><h3>결과를 나중에도 보고 싶다면</h3><p>이메일은 선택사항이며, 저장 목적 외 소식 수신은 따로 동의받아요.</p><form id="email-form"><label class="sr-only" for="email">이메일</label><input id="email" type="email" placeholder="you@example.com" required /><label class="check"><input id="updates" type="checkbox" /> 새로운 서비스 소식도 받을게요</label><button class="button button-dark full" type="submit">결과 저장하기</button><p id="email-message" class="form-message" role="status"></p></form></div><button class="text-button" id="restart-button">처음부터 다시 보기</button></div>
+        <div class="narrow"><p class="eyebrow" id="results-eyebrow">발견 완료</p><h2 id="results-title">당신에게 맞는<br /><em>서비스예요.</em></h2><p class="lede" id="results-lede">관심 표시한 서비스를 먼저 모았어요. 바로 열어보고, 쓸모를 발견해보세요.</p><div id="result-list"></div><button class="button button-dark full hidden" id="continue-button">다음 10개 더 보기 <span aria-hidden="true">→</span></button><div class="email-box"><h3>결과를 나중에도 보고 싶다면</h3><p>이메일은 선택사항이며, 저장 목적 외 소식 수신은 따로 동의받아요.</p><form id="email-form"><label class="sr-only" for="email">이메일</label><input id="email" type="email" placeholder="you@example.com" required /><label class="check"><input id="updates" type="checkbox" /> 새로운 서비스 소식도 받을게요</label><button class="button button-dark full" type="submit">결과 저장하기</button><p id="email-message" class="form-message" role="status"></p></form></div><button class="text-button" id="ranking-link-results">🏆 가장 많이 선택된 서비스 랭킹 보기</button><button class="text-button" id="restart-button">처음부터 다시 보기</button></div>
+      </section>
+
+      <section class="shell hidden" id="ranking" aria-labelledby="ranking-title">
+        <nav class="topbar"><strong class="wordmark">gyro<span>.</span></strong><span class="pill">인기 랭킹</span></nav>
+        <div class="narrow">
+          <p class="eyebrow">모두의 선택</p>
+          <h2 id="ranking-title">가장 많이<br /><em>관심 있음</em>을 받은 서비스</h2>
+          <p class="lede">지금까지 오른쪽으로 스와이프(관심 있음)된 횟수를 기준으로 모은 랭킹이에요.</p>
+          <ol id="ranking-list" class="ranking-list"></ol>
+          <p id="ranking-empty" class="form-message hidden">아직 집계된 선택이 없어요. 먼저 서비스를 둘러보고 관심 있는 서비스에 스와이프해 주세요!</p>
+          <button class="text-button" id="ranking-back">뒤로 가기</button>
+        </div>
       </section>
 
       <!-- Embedded service preview: an iframe modal so users can try a

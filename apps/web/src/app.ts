@@ -25,7 +25,7 @@ const BATCH_SIZE = 10;
 let services: Service[] = [], index = 0, batchStart = 0, batchEnd = 0, liked: Service[] = [], history: Array<{service:Service; action:'like'|'dislike'|'skip'}> = [];
 let audience: Audience | null = null, interests = new Set<string>();
 const $ = <T extends HTMLElement>(id:string) => document.getElementById(id) as T;
-const screens = ['landing','profile','cards','results'];
+const screens = ['landing','profile','cards','results','ranking'];
 function show(id:string){screens.forEach(x => $(x).classList.toggle('hidden', x !== id)); window.scrollTo({top:0,behavior:'smooth'});}
 function track(name:string, metadata:Record<string,unknown>={}){void fetch(`${API}/api/events`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,sessionId,metadata})}).catch(()=>{});}
 function startBatch(){ batchStart = index; batchEnd = Math.min(index + BATCH_SIZE, services.length); }
@@ -196,6 +196,29 @@ function closePreview(){
   window.clearTimeout(previewLoadTimer);
   $<HTMLIFrameElement>('preview-frame').src = 'about:blank';
 }
+// Ranking: aggregated server-side from anonymous 'card_like' (right-swipe)
+// events, so it reflects everyone's choices, not just this session's.
+let rankingOrigin: 'landing' | 'results' = 'landing';
+async function openRanking(origin: 'landing' | 'results'){
+  rankingOrigin = origin;
+  show('ranking');
+  const list = $('ranking-list');
+  const empty = $('ranking-empty');
+  list.innerHTML = '<li class="ranking-loading">불러오는 중...</li>';
+  empty.classList.add('hidden');
+  try {
+    const r = await fetch(`${API}/api/services/ranking`);
+    const body = await r.json();
+    const ranking: Array<{id:string; name:string; tagline:string; serviceUrl:string; likeCount:number}> = body.ranking || [];
+    if (ranking.length === 0) { list.innerHTML = ''; empty.classList.remove('hidden'); return; }
+    list.innerHTML = ranking.map((s, i) => `<li class="ranking-item"><span class="ranking-rank">${i + 1}</span><div class="ranking-info"><strong>${s.name}</strong><p>${s.tagline}</p></div><span class="ranking-count">${s.likeCount}회 선택</span></li>`).join('');
+  } catch {
+    list.innerHTML = '';
+    empty.textContent = '랭킹을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
+    empty.classList.remove('hidden');
+  }
+}
+function closeRanking(){ show(rankingOrigin); }
 const startButton = $<HTMLButtonElement>('start-button');
 const startButtonDefaultText = startButton.textContent ?? '';
 // §26.4.6: an empty catalog (all exhibits currently unreachable) must show a
@@ -234,4 +257,7 @@ $('restart-button').onclick=()=>{index=0;batchStart=0;batchEnd=0;liked=[];histor
 $('email-form').onsubmit=async e=>{e.preventDefault();const message=$('email-message');try{const r=await fetch(`${API}/api/email-leads`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$<HTMLInputElement>('email').value,updatesOptIn:$<HTMLInputElement>('updates').checked})});const body=await r.json();if(!r.ok)throw new Error(body.message);message.textContent='결과를 저장했어요.';track('email_submit',{updatesOptIn:$<HTMLInputElement>('updates').checked});}catch(error){message.textContent=error instanceof Error?error.message:'저장에 실패했어요.';}};
 $('preview-close').onclick=closePreview;
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePreview();});
+$('ranking-link-landing').onclick=()=>openRanking('landing');
+$('ranking-link-results').onclick=()=>openRanking('results');
+$('ranking-back').onclick=closeRanking;
 void load();
