@@ -1,6 +1,7 @@
 import express, { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { catalog as liveCatalog } from './catalog.js';
+import { checkServiceHealth } from './services/health-check.service.js';
 
 type Audience = 'student' | 'teacher' | 'parent' | 'other';
 type EventName =
@@ -79,9 +80,13 @@ export function createApp() {
     res.json({ status: 'ok', service: 'gyro-api', timestamp: new Date().toISOString() });
   });
 
-  app.get('/api/services', (_req, res) => {
-    const checkedAt = new Date().toISOString();
-    res.json({ services: dedupedCatalog.map((service) => ({ ...service, health: { status: 'healthy', checkedAt } })) });
+  app.get('/api/services', async (_req, res) => {
+    const checked = await Promise.all(
+      dedupedCatalog.map(async (service) => ({ service, health: await checkServiceHealth(service.serviceUrl) }))
+    );
+    // §26.6.3: only services that pass a recent health check reach the swipe deck.
+    const services = checked.filter((c) => c.health.status === 'healthy').map((c) => ({ ...c.service, health: c.health }));
+    res.json({ services });
   });
 
   app.post('/api/events', (req, res) => {
