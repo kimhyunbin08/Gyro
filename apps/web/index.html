@@ -44,16 +44,17 @@
           <div class="swipe-stage" id="swipe-stage" tabindex="0" aria-label="서비스 카드. 왼쪽/오른쪽으로 드래그하거나 화살표 키를 사용하세요. 오른쪽은 관심 있음, 왼쪽은 관심 없음입니다."></div>
           <div class="card-actions"><button class="round-button reject" id="reject-button" aria-label="관심 없음">×</button><button class="round-button undo" id="undo-button" aria-label="되돌리기">↶</button><button class="round-button like" id="like-button" aria-label="관심 있음">♥</button></div>
           <p class="keyboard-hint">드래그 또는 트랙패드로 스와이프 &nbsp;·&nbsp; ← 관심 없음 &nbsp;·&nbsp; → 관심 있음 &nbsp;·&nbsp; U 되돌리기</p>
-          <!-- Phase 2 draft (prd.md §14.3): optional, skippable 1-tap reason
-               tag shown right after a dislike swipe. Auto-dismisses so it
-               never blocks continued swiping. -->
-          <div class="reason-toast hidden" id="reason-toast" role="status" aria-label="관심 없는 이유 (선택)"></div>
         </div>
       </section>
 
       <section class="shell hidden" id="results" aria-labelledby="results-title">
         <nav class="topbar"><strong class="wordmark">gyro<span>.</span></strong><span class="pill" id="results-pill">YOUR PICKS</span></nav>
-        <div class="narrow"><p class="eyebrow" id="results-eyebrow">발견 완료</p><h2 id="results-title">당신에게 맞는<br /><em>서비스예요.</em></h2><p class="lede" id="results-lede">관심 표시한 서비스를 먼저 모았어요. 바로 열어보고, 쓸모를 발견해보세요.</p><div id="result-list"></div><button class="button button-dark full hidden" id="continue-button">다음 10개 더 보기 <span aria-hidden="true">→</span></button><div class="email-box"><h3>결과를 나중에도 보고 싶다면</h3><p>이메일은 선택사항이며, 저장 목적 외 소식 수신은 따로 동의받아요.</p><form id="email-form"><label class="sr-only" for="email">이메일</label><input id="email" type="email" placeholder="you@example.com" required /><label class="check"><input id="updates" type="checkbox" /> 새로운 서비스 소식도 받을게요</label><button class="button button-dark full" type="submit">결과 저장하기</button><p id="email-message" class="form-message" role="status"></p></form></div><button class="text-button" id="ranking-link-results">🏆 가장 많이 선택된 서비스 랭킹 보기</button><button class="text-button" id="restart-button">처음부터 다시 보기</button></div>
+        <div class="narrow"><p class="eyebrow" id="results-eyebrow">발견 완료</p><h2 id="results-title">당신에게 맞는<br /><em>서비스예요.</em></h2><p class="lede" id="results-lede">관심 표시한 서비스를 먼저 모았어요. 바로 열어보고, 쓸모를 발견해보세요.</p><div id="result-list"></div>
+          <!-- Phase 2 draft (prd.md §14.3): optional, skippable reason tags
+               for services disliked this round, asked once here (batched)
+               instead of interrupting each dislike swipe. -->
+          <div id="dislike-reasons"></div>
+          <button class="button button-dark full hidden" id="continue-button">다음 10개 더 보기 <span aria-hidden="true">→</span></button><div class="email-box"><h3>결과를 나중에도 보고 싶다면</h3><p>이메일은 선택사항이며, 저장 목적 외 소식 수신은 따로 동의받아요.</p><form id="email-form"><label class="sr-only" for="email">이메일</label><input id="email" type="email" placeholder="you@example.com" required /><label class="check"><input id="updates" type="checkbox" /> 새로운 서비스 소식도 받을게요</label><button class="button button-dark full" type="submit">결과 저장하기</button><p id="email-message" class="form-message" role="status"></p></form></div><button class="text-button" id="ranking-link-results">🏆 가장 많이 선택된 서비스 랭킹 보기</button><button class="text-button" id="restart-button">처음부터 다시 보기</button></div>
       </section>
 
       <section class="shell hidden" id="ranking" aria-labelledby="ranking-title">
