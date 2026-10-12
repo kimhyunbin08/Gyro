@@ -84,11 +84,14 @@ flowchart LR
 10. 랜딩/결과 화면의 "🏆 가장 많이 선택된 서비스 랭킹" 버튼은 `#ranking` 화면을 열고
     `GET /api/services/ranking`을 호출해 순위를 렌더링한다. 집계가 없으면 안내 문구를 보여주고,
     "뒤로 가기"는 랭킹을 열었던 화면(랜딩 또는 결과)으로 돌아간다.
-11. **스와이프 이유 마이크로 피드백**(Phase 2 §14.3 승격): `decide('dislike')` 직후
-    `showReasonToast()`가 카드 화면 하단에 `#reason-toast`(이유 태그 4개 + 건너뛰기 ×)를 띄운다.
-    이유 태그 클릭 시 `card_dislike` 이벤트를 `metadata: {serviceId, reason, stage:'reason_tag'}`로
-    추가 전송하고(원래 스와이프 시점에 보낸 `card_dislike` 이벤트와는 별개), 건너뛰기 또는 4초
-    타임아웃이면 전송 없이 닫힌다. 토스트가 떠 있는 동안에도 다음 카드 스와이프는 그대로 가능하다.
+11. **스와이프 이유 마이크로 피드백**(Phase 2 §14.3 승격): `decide('dislike')`는 질문 없이 즉시
+    다음 카드로 넘어가고, 넘긴 서비스를 그 라운드의 `dislikedThisBatch` 배열에 쌓아둔다. 라운드가
+    끝나 결과 화면(`finishBatch()`)에 들어서면 `dislikeReasonsHtml()`이 해당 라운드의 관심 없음
+    서비스들을 모아 `#dislike-reasons`에 서비스별 이유 태그(4개) 목록을 렌더링하고,
+    `bindDislikeReasons()`가 클릭을 바인딩한다. 이유 태그 클릭 시 `card_dislike` 이벤트를
+    `metadata: {serviceId, reason, stage:'reason_tag'}`로 추가 전송하고(원래 스와이프 시점에 보낸
+    `card_dislike` 이벤트와는 별개), 선택하지 않아도 결과 화면 이용에는 영향이 없다. 스와이프 중에는
+    어떤 경우에도 이유 태그 UI가 노출되지 않는다(카드 진행을 가로막지 않도록 분리).
 12. **미리보기 재체험 의향 질문**(Phase 2 §14.3 승격): 미리보기 닫기 버튼/Escape는 바로 닫지 않고
     `requestClosePreview()`가 먼저 `#retry-intent`("다시 써보고 싶나요?" 예/아니오/글쎄요 +
     건너뛰고 닫기)를 보여준다. 응답 시 `answerRetryIntent()`가 `service_click` 이벤트를
