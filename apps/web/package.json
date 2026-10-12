@@ -1,22 +1,19 @@
 {
-  "name": "@luggy/web",
+  "name": "@gyro/web",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 0.0.0.0 --port 4173",
     "start": "vite preview",
-    "test": "vitest run tests/funnel.unit.test.ts",
-    "e2e": "playwright test",
-    "build": "vite build",
-    "dev": "vite --host 0.0.0.0 --port 4173"
+    "test": "vitest run tests/catalog-load.unit.test.ts",
+    "build": "vite build"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
     "jsdom": "^29.1.1",
     "vite": "^8.2.1"
   }

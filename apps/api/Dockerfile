@@ -33,9 +33,6 @@ COPY --from=builder /app/apps/api/package*.json ./
 # Copy built app
 COPY --from=builder /app/apps/api/dist ./dist
 
-# Database init script
-COPY apps/api/schema.sql ./
-
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3001/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
