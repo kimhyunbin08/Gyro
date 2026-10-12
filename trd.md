@@ -474,3 +474,20 @@ export function rankQuickRentalCandidates(candidates, context, limit = 3)
 4. 시/도만 선택하고 시/군/구·동을 선택하지 않은 채 "다음"을 누르면 진행이 차단되는지 확인
 5. 시/군/구·동까지 모두 선택 후 가입 완료 시 헤더 배지에 "구 동" 형식으로 정확히 표시되는지 확인
 6. 캐리어 등록 폼에서도 동일한 3단계 선택 UI가 동작하고, 미선택 시 등록이 차단되는지 확인
+
+## 23. 서비스 발견 트랙 테스트 계약
+### 23.1 계층별 책임
+| 계층 | 대상 | 자동화 위치 | 최소 검증 |
+|---|---|---|---|
+| Unit | 카탈로그 로딩 상태, 빈 카탈로그 가드, 퍼널 헬퍼 | `apps/web/tests/*.unit.test.ts` | 로딩 중 비활성화, 실패 시 카드 진입 차단 |
+| Integration | 서비스 카탈로그 dedupe, 이벤트 payload, 리드 중복 | `apps/api/tests/integration.gyro.test.ts` | HTTP status와 응답 shape |
+| E2E | 실제 Vite 앱의 랜딩-프로필-10장 배치-계속 흐름 | `apps/web/e2e/discovery.spec.ts` | `1 / 10`, 중간 결과, 다음 배치 |
+
+### 23.2 실행 계약
+```bash
+npm run -w apps/web test
+npm run -w apps/api test
+npm run -w apps/web e2e
+```
+
+E2E는 Vite dev server를 자동 기동하며 서비스 API와 이벤트 API는 Playwright route mock으로 격리한다. API 통합 테스트는 `createApp()`을 직접 구동하여 외부 Azure 리소스 없이 실행한다.

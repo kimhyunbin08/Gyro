@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "start": "vite preview",
-    "test": "vitest run tests/funnel.unit.test.ts",
+    "test": "vitest run tests/*.unit.test.ts",
     "e2e": "playwright test",
     "build": "vite build",
     "dev": "vite --host 0.0.0.0 --port 4173"
