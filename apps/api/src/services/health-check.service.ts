@@ -48,17 +48,37 @@ async function refresh(url: string): Promise<HealthCheckResult> {
 }
 
 /**
- * Returns the cached health result for `url` when it is still fresh.
- * Otherwise performs (and dedupes concurrent) live checks. Unit/integration
- * tests run with `NODE_ENV=test` and never hit the network: every service is
- * treated as healthy so suites stay deterministic and offline-friendly.
+ * Starts (or reuses) an in-flight live check for `url` without making the
+ * caller wait for it.
+ */
+function refreshInBackground(url: string): void {
+  if (inFlight.has(url)) return;
+  const promise = refresh(url).finally(() => inFlight.delete(url));
+  inFlight.set(url, promise);
+  promise.catch(() => {
+    /* refresh() itself never rejects; this guards against unhandled rejection noise. */
+  });
+}
+
+/**
+ * Returns the cached health result for `url` when one exists — fresh cache
+ * hits are served as-is, and an expired entry is still served immediately
+ * (stale) while a refresh is kicked off in the background, so a burst of
+ * visitors after the 10-minute TTL never blocks on live network checks.
+ * Only a URL with no cache entry at all blocks on (and dedupes concurrent)
+ * live checks. Unit/integration tests run with `NODE_ENV=test` and never hit
+ * the network: every service is treated as healthy so suites stay
+ * deterministic and offline-friendly.
  */
 export async function checkServiceHealth(url: string): Promise<HealthCheckResult> {
   if (process.env.NODE_ENV === 'test') {
     return { status: 'healthy', checkedAt: new Date().toISOString() };
   }
   const cached = cache.get(url);
-  if (cached && cached.expiresAt > Date.now()) return cached;
+  if (cached) {
+    if (cached.expiresAt <= Date.now()) refreshInBackground(url);
+    return cached;
+  }
   const pending = inFlight.get(url);
   if (pending) return pending;
   const promise = refresh(url).finally(() => inFlight.delete(url));
