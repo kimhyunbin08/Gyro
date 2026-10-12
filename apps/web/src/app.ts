@@ -113,7 +113,7 @@ function bindWheelGestures(card:HTMLElement){
     }, 140);
   };
 }
-// §26.3/§26.6.7: every card shows at least one explainable reason, derived
+// prd.md §8/§9 item 8: every card shows at least one explainable reason, derived
 // from the same tag/audience overlap used to rank the deck in profile-next.
 function recommendationReason(service: Service): string {
   const matchedTags = service.tags.filter((t) => interests.has(t));
@@ -221,7 +221,7 @@ async function openRanking(origin: 'landing' | 'results'){
 function closeRanking(){ show(rankingOrigin); }
 const startButton = $<HTMLButtonElement>('start-button');
 const startButtonDefaultText = startButton.textContent ?? '';
-// §26.4.6: an empty catalog (all exhibits currently unreachable) must show a
+// prd.md §9 item 6: an empty catalog (all exhibits currently unreachable) must show a
 // "preparing/try again" state instead of silently letting the user swipe
 // through zero cards into a misleading "all done" results screen.
 async function load(){

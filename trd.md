@@ -15,6 +15,9 @@
 2. 실제 이메일 발송 파이프라인(SMTP/ESP 연동, 반송 처리, 원클릭 수신거부).
 3. 데이터베이스 영속화 — 현재 이벤트/이메일 리드는 프로세스 메모리에만 보관된다.
 
+> Phase 2("검증 루프") 설계 초안은 §10에 별도로 정리되어 있으며, 아직 구현되지 않았다. §10이
+> 실제 반영되기 전까지는 위 Out of Scope 항목이 그대로 유효하다.
+
 ## 3. 기술 스택
 1. **Frontend**: TypeScript + Vite, 순수 DOM 조작(프레임워크 없음), `fetch`로 API 호출.
 2. **Backend API**: Node.js + Express 5 + Zod(입력 검증) + TypeScript(ESM).
@@ -27,7 +30,7 @@
 ```mermaid
 flowchart LR
   U["사용자 브라우저"] -->|GET /config.json| W["apps/web (Vite static)"]
-  U -->|GET /api/services\nPOST /api/events\nPOST /api/email-leads| A["apps/api (Express)"]
+  U -->|GET /api/services\nGET /api/services/ranking\nPOST /api/events\nPOST /api/email-leads| A["apps/api (Express)"]
   A -->|HEAD/GET 헬스체크| S["학생 제작 서비스 URL들\n(외부, Azure 등)"]
   A -->|정적 import| C["apps/api/src/catalog.ts"]
 ```
@@ -120,12 +123,22 @@ type FunnelEvent = { name: EventName; sessionId: string; metadata: Record<string
 현재는 `Set<string>`(정규화된 이메일 주소)만 보관하며, 가입 시각/동의 여부 등은 저장하지 않는다.
 실데이터 영속화가 필요해지면 DB 테이블 설계가 선행되어야 한다(§2.2 Out of Scope 참고).
 
+### 6.5 랭킹 엔트리
+```ts
+type RankingEntry = { id: string; name: string; tagline: string; serviceUrl: string; likeCount: number };
+```
+`GET /api/services/ranking`은 `likeCount > 0`인 서비스만, `likeCount` 내림차순으로 최대
+`RANKING_LIMIT`(20)개까지 반환한다. 별도 영속 저장소 없이 §6.3 `FunnelEvent` 배열을 즉시
+재집계한 값이므로, 프로세스 재시작 시 집계가 초기화된다(§2.2 Out of Scope의 "DB 없음" 전제와 동일한
+trade-off).
+
 ## 7. API 스펙
 
 | 메서드/경로 | 설명 | 검증 | 응답 |
 | --- | --- | --- | --- |
 | `GET /health` | 컨테이너 헬스체크 | - | `{ status: 'ok', service, timestamp }` |
 | `GET /api/services` | 헬스체크 통과 + 중복 제거된 카탈로그 | - | `{ services: Service[] }` |
+| `GET /api/services/ranking` | 누적 `card_like` 횟수 기준 상위 `RANKING_LIMIT`(20)개 서비스 랭킹 | - | `{ ranking: RankingEntry[] }` |
 | `POST /api/events` | 퍼널 이벤트 적재 | Zod(`eventSchema`) | `202 { accepted: true }` / `400` |
 | `POST /api/email-leads` | 이메일 리드 저장 | Zod(`emailSchema`) | `201` / `409` 중복 / `400` |
 
@@ -142,3 +155,63 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
 2. 헬스체크 타임아웃은 4초로 제한해 느린/죽은 서비스가 `/api/services` 응답 전체를 지연시키지
    않도록 한다.
 3. 이벤트 저장소는 최대 5000건으로 제한해 메모리 누수를 방지한다.
+
+## 10. Phase 2 — "검증 루프" 기술 설계 초안 (미구현)
+
+> `prd.md` §14의 요구사항 초안에 대응하는 기술 설계 초안이다. §2(범위)·§6(데이터 모델)·§7(API 스펙)은
+> Phase 1(현재 배포된 MVP)만을 반영하며, 이 섹션은 **아직 구현되지 않았다.** 착수 시 해당 설계를
+> §2~§7로 승격하고 이 섹션은 제거(또는 "완료"로 표시)한다.
+
+### 10.1 §14.3 (계정 불필요) — API 스키마 변경 없이 수용 가능
+- `card_dislike` 이벤트의 `metadata`에 `reason?: string` 필드를 추가한다. `eventSchema`의
+  `metadata: z.record(z.string(), z.unknown()).optional()`이 이미 임의 키를 허용하므로 **Zod 스키마
+  변경이 필요 없다.** 프론트엔드에서 허용 가능한 `reason` 값 집합(예: `'unclear' | 'not_relevant' |
+  'bad_design' | 'already_used'`)만 상수로 정의해 전송하면 된다.
+- `service_click` 이벤트의 `metadata`에 `retryIntent?: 'yes' | 'no' | 'unsure'` 필드를 추가한다
+  (동일하게 스키마 변경 불필요).
+- 퍼널 드롭오프 집계는 `GET /api/services/ranking`과 유사하게 기존 `events` 배열을 서비스별로
+  재집계하는 **읽기 전용 신규 엔드포인트** `GET /api/services/funnel`(가칭)로 제공 가능 — 역시
+  새 저장소 없이 기존 인메모리 이벤트 스토어만 재사용한다.
+
+### 10.2 §14.4 (빌더 계정 필요) — 아키텍처 전제 변경 필요
+- **인증**: 빌더 인증 방식은 미확정(매직링크 이메일 / GitHub OAuth / 바이브벤처 기관 발급 코드 등
+  `ideation.md` §8 오픈 퀘스천 참고). 어떤 방식이든 발견 사용자 플로우(`landing/profile/cards/
+  results/ranking`)와는 완전히 분리된 신규 라우트(`/builder/*`)로 설계해 기존 무로그인 플로우에
+  영향을 주지 않는다.
+- **영속화 전제 변경**: 현재 "DB 없음, 인메모리 전용"(§2.2/§6.4) 전제가 깨진다. 최소한 다음 엔티티는
+  프로세스 재시작에도 살아남는 저장소(SQLite/Postgres 등)가 필요하다 — 빌더 계정, 서비스별 버전
+  이력, (선택) A/B 카드 변형. 이벤트/랭킹 집계는 당분간 인메모리로 유지해도 되지만, 빌더 대시보드가
+  참조하는 이상 재시작 시 리포트가 초기화되는 trade-off를 명시적으로 감수해야 한다.
+- **신규 데이터 모델(초안)**:
+  ```ts
+  type Builder = { id: string; email: string; createdAt: string };
+  type ServiceVersion = {
+    serviceId: string; versionNo: number; tagline: string; description: string;
+    imageUrl: string; createdAt: string;
+  };
+  type CardVariant = { serviceId: string; variantId: 'a' | 'b'; tagline: string; imageUrl: string };
+  ```
+- **신규 엔드포인트(초안, 미구현)**:
+  | 메서드/경로 | 설명 | 인증 |
+  | --- | --- | --- |
+  | `POST /api/builder/auth/request` | 매직링크 등 인증 요청 | - |
+  | `GET /api/builder/services/:id/dashboard` | 요약/피드백/세그먼트/버전이력/체험 데이터 조회 | 빌더 |
+  | `POST /api/builder/services/:id/versions` | 서비스 설명/이미지 갱신(버전 이력 생성) | 빌더 |
+  | `POST /api/builder/services/:id/variants` | A/B 카드 변형 등록 | 빌더 |
+- **추천 정렬 로직 영향**: §14.4.6의 "탐색 노출 비율"은 `profile-next` 클릭 시의 1회성 정렬
+  (`app.ts`의 태그/유형 일치 점수 계산)에 "일정 비율 무작위 셔플"을 섞는 방식으로 구현 가능하며,
+  이는 모델 기반 추천이 아니므로 AGENTS.md §4의 "자동 개인화 모델 금지"에 해당하지 않는다.
+
+### 10.3 테스트 전략 확장(초안)
+- §10.1 항목은 기존 `integration.gyro.test.ts` 패턴을 그대로 따라 `metadata.reason`/
+  `metadata.retryIntent` 포함 이벤트가 `202`로 수락되는지, 신규 집계 엔드포인트가 올바른 형태를
+  반환하는지 테스트를 추가한다(스키마 변경이 없으므로 기존 Zod 검증 테스트는 그대로 유효).
+- §10.2 항목은 영속 저장소(DB) 도입이 선행되어야 하므로, 테스트 전략도 그때 함께 설계한다(예:
+  테스트용 임시 DB 파일/인메모리 SQLite 등 — 현재는 미확정).
+
+### 10.4 롤아웃 순서 제안
+1. §10.1(API 확장 없음) → 프론트엔드 UI만 추가, 가장 낮은 리스크.
+2. §10.1의 `GET /api/services/funnel` 신규 엔드포인트 추가.
+3. §10.2 착수 전 ADR 작성: 인증 방식 확정, DB 선택, 기존 "DB 없음" 전제를 깨는 것에 대한 합의.
+4. §10.2 빌더 대시보드 최소 버전(읽기 전용 요약 + 피드백 피드) 구현.
+5. 검증 배지, A/B 카드 테스트, 버전 이력 비교는 대시보드 안정화 후 순차 추가.

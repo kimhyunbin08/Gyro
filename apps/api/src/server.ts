@@ -86,7 +86,7 @@ export function createApp() {
     const checked = await Promise.all(
       dedupedCatalog.map(async (service) => ({ service, health: await checkServiceHealth(service.serviceUrl) }))
     );
-    // §26.6.3: only services that pass a recent health check reach the swipe deck.
+    // prd.md §9 item 5: only services that pass a recent health check reach the swipe deck.
     const services = checked.filter((c) => c.health.status === 'healthy').map((c) => ({ ...c.service, health: c.health }));
     res.json({ services });
   });

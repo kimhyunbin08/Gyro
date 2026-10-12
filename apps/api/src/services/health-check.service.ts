@@ -1,7 +1,7 @@
 // Live reachability check for Vibe Venture showcase services.
 //
-// prd.md §26.4.5 requires each service's Azure health check state to be
-// verified server-side, and §26.6.3 requires that only services which pass
+// prd.md §9 item 5 requires each service's live reachability state to be
+// verified server-side, and requires that only services which pass
 // a recent health check are exposed to the swipe deck. Previously this was
 // a static `{ status: 'healthy' }` stub regardless of whether the exhibited
 // site actually responded, so a dead/decommissioned student project would
