@@ -145,8 +145,14 @@ function finishBatch(){
     continueButton.classList.add('hidden');
   }
 }
-async function load(){try{const response=await fetch(`${API}/api/services`);if(!response.ok)throw new Error('services');const payload=await response.json();services=payload.services;track('landing_view');}catch{services=[];$('start-button').textContent='서비스를 불러오지 못했어요';}}
-$('start-button').onclick=()=>{show('profile');renderChoices();};
+const startButton = $('start-button');
+const startButtonDefaultText = startButton.textContent ?? '';
+async function load(){try{const response=await fetch(`${API}/api/services`);if(!response.ok)throw new Error('services');const payload=await response.json();services=payload.services;track('landing_view');startButton.disabled=false;startButton.textContent=startButtonDefaultText;}catch{services=[];startButton.disabled=false;startButton.textContent='서비스를 불러오지 못했어요';}}
+// Fetching the catalog is async, so clicking "발견 시작하기" before it
+// resolves would leave `services` empty and strand the cards screen at
+// 0/0. Disable the button until the catalog is ready (or failed) instead.
+startButton.disabled=true;startButton.textContent='불러오는 중...';
+$('start-button').onclick=()=>{if(services.length===0)return;show('profile');renderChoices();};
 $('profile-next').onclick=()=>{services=[...services].sort((a,b)=>(b.tags.filter(t=>interests.has(t)).length+(b.audiences.includes(audience!)?1:0))-(a.tags.filter(t=>interests.has(t)).length+(a.audiences.includes(audience!)?1:0)));track('profile_submit',{audience,interests:[...interests]});startBatch();show('cards');renderCard();};
 function triggerDecision(action:'like'|'dislike'){ if(index>=batchEnd)return; const card=$('swipe-stage').querySelector<HTMLElement>('.service-card'); if(card) flyOutCard(card, action, () => decide(action)); else decide(action); }
 $('like-button').onclick=()=>triggerDecision('like');$('reject-button').onclick=()=>triggerDecision('dislike');$('undo-button').onclick=undo;$('swipe-stage').onkeydown=e=>{if(e.key==='ArrowRight')triggerDecision('like');if(e.key==='ArrowLeft')triggerDecision('dislike');if(e.key.toLowerCase()==='u')undo();};
