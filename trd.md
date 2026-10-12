@@ -48,8 +48,14 @@ flowchart LR
 3. 카드 스와이프는 포인터 이벤트(터치/마우스 공통)와 트랙패드 `wheel` 이벤트(가로 2핑거 스와이프)를
    모두 지원하며, 커밋 임계값(`SWIPE_COMMIT_PX`)과 속도(`SWIPE_VELOCITY_PX_MS`) 중 하나를 넘으면
    결정으로 처리한다.
-4. 추천 정렬은 `profile-next` 클릭 시 관심사 태그 일치 수 + 유형 일치 여부로 1회 계산해 정렬하고,
-   카드 렌더링 시 `recommendationReason()`이 같은 신호로 한 줄 추천 이유를 만든다.
+4. 추천 정렬 및 턴(라운드) 구성: `matchScore(service, audience, interests)`가 관심사 태그 일치마다
+   `INTEREST_WEIGHT`(기본 2)를, 선택한 사용자 유형과 일치하면 `AUDIENCE_WEIGHT`(기본 3)를 더해
+   독립적으로 가중치를 분리해 계산한다. `profile-next` 클릭 시 전체 카탈로그를 이 점수로 1회
+   내림차순 정렬한 뒤 `startBatch()`가 앞에서부터 `BATCH_SIZE`(10)개씩 잘라 라운드를 구성하므로,
+   사용자가 선택한 발견자 유형(`audience`)과 관심사(`interests`)에 따라 1라운드가 항상 가장 잘
+   맞는 10개, 다음 라운드가 그다음으로 잘 맞는 10개 순으로 구성된다. 카드 렌더링 시
+   `recommendationReason()`이 `matchedInterestTags()`를 재사용해 같은 신호로 한 줄 추천 이유를
+   만든다.
 5. 라운드 배칭: `BATCH_SIZE = 10`. `startBatch()`가 `batchStart`/`batchEnd`를 갱신하고,
    `finishBatch()`가 남은 서비스 유무에 따라 결과 화면 문구/다음 라운드 버튼을 분기한다.
 6. 결과 화면 피드백: `finishBatch()`가 관심 표시 서비스(`liked`)마다 `feedbackWidgetHtml()`로 별점
@@ -127,7 +133,8 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
 ## 8. 테스트 전략
 - API: Vitest + Supertest. `apps/api/tests/integration.gyro.test.ts`(엔드포인트 통합),
   `apps/api/tests/unit.health-check.test.ts`(헬스체크 캐시/폴백/테스트 환경 단축 경로).
-- Web: Vitest + jsdom. `apps/web/tests/catalog-load.unit.test.ts`(시작 버튼 경쟁 조건 가드).
+- Web: Vitest + jsdom. `apps/web/tests/catalog-load.unit.test.ts`(시작 버튼 경쟁 조건 가드),
+  `apps/web/tests/match-score.unit.test.ts`(`matchScore`/`matchedInterestTags` 가중치 분리 검증).
 - 모든 테스트는 `NODE_ENV=test`에서 외부 네트워크 호출 없이 동작해야 한다.
 
 ## 9. 비기능 요구사항
