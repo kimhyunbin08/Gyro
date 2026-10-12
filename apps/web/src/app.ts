@@ -112,13 +112,22 @@ function bindWheelGestures(card:HTMLElement){
     }, 140);
   };
 }
+// §26.3/§26.6.7: every card shows at least one explainable reason, derived
+// from the same tag/audience overlap used to rank the deck in profile-next.
+function recommendationReason(service: Service): string {
+  const matchedTags = service.tags.filter((t) => interests.has(t));
+  const audienceMatch = audience && service.audiences.includes(audience);
+  if (matchedTags.length > 0) return `"${matchedTags[0]}" 관심사와 잘 맞아요`;
+  if (audienceMatch) return '선택하신 유형에게 인기 있어요';
+  return '지금 둘러보기 좋은 서비스예요';
+}
 function renderCard(){
   if (index >= batchEnd) { finishBatch(); return; }
   $('progress').textContent = `${index - batchStart + 1} / ${batchEnd - batchStart}`;
   const stage = $('swipe-stage');
   dragX = 0; wheelAccumX = 0;
   const service = services[index];
-  stage.innerHTML = `<article class="service-card" style="background-image:url('${service.imageUrl}')"><span class="swipe-stamp like" aria-hidden="true">관심 있음</span><span class="swipe-stamp nope" aria-hidden="true">관심 없음</span><div class="service-copy"><div class="service-tags">${service.tags.map(t=>`<span>${t}</span>`).join('')}</div><h3>${service.name}</h3><p>${service.tagline}</p></div></article>`;
+  stage.innerHTML = `<article class="service-card" style="background-image:url('${service.imageUrl}')"><span class="swipe-stamp like" aria-hidden="true">관심 있음</span><span class="swipe-stamp nope" aria-hidden="true">관심 없음</span><div class="service-copy"><div class="service-tags">${service.tags.map(t=>`<span>${t}</span>`).join('')}</div><h3>${service.name}</h3><p>${service.tagline}</p><p class="service-reason">✨ ${recommendationReason(service)}</p></div></article>`;
   const card = stage.querySelector<HTMLElement>('.service-card')!;
   bindCardGestures(card);
   bindWheelGestures(card);
@@ -145,9 +154,31 @@ function finishBatch(){
     continueButton.classList.add('hidden');
   }
 }
-const startButton = $('start-button');
+const startButton = $<HTMLButtonElement>('start-button');
 const startButtonDefaultText = startButton.textContent ?? '';
-async function load(){try{const response=await fetch(`${API}/api/services`);if(!response.ok)throw new Error('services');const payload=await response.json();services=payload.services;track('landing_view');startButton.disabled=false;startButton.textContent=startButtonDefaultText;}catch{services=[];startButton.disabled=false;startButton.textContent='서비스를 불러오지 못했어요';}}
+// §26.4.6: an empty catalog (all exhibits currently unreachable) must show a
+// "preparing/try again" state instead of silently letting the user swipe
+// through zero cards into a misleading "all done" results screen.
+async function load(){
+  try{
+    const response=await fetch(`${API}/api/services`);
+    if(!response.ok)throw new Error('services');
+    const payload=await response.json();
+    services=payload.services;
+    if(services.length===0){
+      startButton.disabled=false;
+      startButton.textContent='서비스를 준비 중이에요. 잠시 후 다시 시도해주세요';
+      return;
+    }
+    track('landing_view');
+    startButton.disabled=false;
+    startButton.textContent=startButtonDefaultText;
+  }catch{
+    services=[];
+    startButton.disabled=false;
+    startButton.textContent='서비스를 불러오지 못했어요';
+  }
+}
 // Fetching the catalog is async, so clicking "발견 시작하기" before it
 // resolves would leave `services` empty and strand the cards screen at
 // 0/0. Disable the button until the catalog is ready (or failed) instead.
