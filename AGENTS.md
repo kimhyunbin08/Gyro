@@ -44,6 +44,8 @@
 - `POST /api/email-leads` (이메일 리드 저장, 중복 방지)
 - `GET /api/services/ranking` (누적 관심 있음 횟수 기준 서비스 랭킹 조회)
 - `GET /api/services/funnel` (서비스별 퍼널 드롭오프/이유 태그/재체험 의향 집계 조회)
+- `GET /api/service-image/:id` (카드 이미지 프록시 — `GET /api/services`가 반환하는 카드 이미지가
+  실제 서비스 화면이어야 한다는 요구사항을 만족시키기 위한 지원 엔드포인트. trd.md §5.4 참고)
 
 ## 6) 작업 규칙
 - 문서 범위를 벗어난 기능은 구현하지 않는다.

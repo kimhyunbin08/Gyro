@@ -2,7 +2,8 @@ import express, { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { catalog as liveCatalog } from './catalog.js';
 import { checkServiceHealth } from './services/health-check.service.js';
-import { allShuffleServices, filterByTier, resolveShuffleCatalog } from './shuffles.js';
+import { allShuffleServices, filterByTier, findServiceById, resolveShuffleCatalog } from './shuffles.js';
+import { getServiceImage } from './image-proxy.js';
 
 type Audience = 'student' | 'teacher' | 'parent' | 'other';
 type EventName =
@@ -121,8 +122,25 @@ export function createApp() {
       source.map(async (service) => ({ service, health: await checkServiceHealth(service.serviceUrl) }))
     );
     // prd.md §9 item 5: only services that pass a recent health check reach the swipe deck.
-    const services = checked.filter((c) => c.health.status === 'healthy').map((c) => ({ ...c.service, health: c.health }));
+    // imageUrl is rewritten to our own proxy (GET /api/service-image/:id) rather than the
+    // catalog's stored screenshot URL: see image-proxy.ts for why hotlinking the original
+    // screenshot source showed a generic placeholder instead of real service imagery.
+    const services = checked
+      .filter((c) => c.health.status === 'healthy')
+      .map((c) => ({ ...c.service, imageUrl: `/api/service-image/${c.service.id}`, health: c.health }));
     res.json({ services });
+  });
+
+  // See image-proxy.ts: fetches (and disk-caches) a real screenshot of the
+  // service's own site instead of the lazy, often-placeholder mshots image
+  // the catalog entries originally pointed at.
+  app.get('/api/service-image/:id', async (req, res) => {
+    const service = findServiceById(req.params.id);
+    if (!service) return res.status(404).end();
+    const { data, contentType } = await getServiceImage(service.serviceUrl, service.name);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Content-Type', contentType);
+    res.send(data);
   });
 
   // prd.md §14.3 / trd.md §10.1 (Phase 2 draft): aggregate per-service
