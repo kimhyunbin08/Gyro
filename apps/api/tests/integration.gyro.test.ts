@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/server.js';
 import { catalog } from '../src/catalog.js';
 
@@ -12,6 +12,29 @@ describe('Gyro discovery API', () => {
     expect(response.status).toBe(200);
     expect(response.body.services).toHaveLength(uniqueServiceUrls.size);
     expect(response.body.services.every((service: { health: { status: string } }) => service.health.status === 'healthy')).toBe(true);
+    // imageUrl must point at our own image-proxy route, not the catalog's raw
+    // (often placeholder-prone) screenshot source — see trd.md §5.4.
+    expect(response.body.services.every((service: { id: string; imageUrl: string }) => service.imageUrl === `/api/service-image/${service.id}`)).toBe(true);
+  });
+
+  describe('GET /api/service-image/:id', () => {
+    const originalFetch = globalThis.fetch;
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    it('serves a real screenshot fetched for a known service id', async () => {
+      const pngBytes = new Uint8Array([1, 2, 3]);
+      globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => pngBytes.buffer }) as unknown as typeof fetch;
+      const response = await request(app).get(`/api/service-image/${catalog[0].id}`);
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toContain('image/png');
+    });
+
+    it('404s for an unknown service id', async () => {
+      const response = await request(app).get('/api/service-image/does-not-exist');
+      expect(response.status).toBe(404);
+    });
   });
 
   // prd.md §9-4 #7: theme shuffles expose a `?tier=mainstream|emerging` filter so the

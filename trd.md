@@ -172,6 +172,24 @@ flowchart LR
 4. `NODE_ENV=test`에서는 네트워크 호출 없이 항상 `healthy`를 반환해, 테스트 스위트가 결정적이고
    오프라인에서도 동작하도록 한다.
 
+### 5.4 서비스 카드 이미지 프록시 (`apps/api/src/image-proxy.ts`)
+카탈로그의 `imageUrl`은 더 이상 `GET /api/services` 응답에 그대로 내려가지 않는다. 각 카탈로그
+항목이 원래 가리키던 s.wordpress.com/mshots 스크린샷은 지연 생성 방식이라, 첫 요청에서는 실제
+화면 대신 "Generating Preview..." 플레이스홀더(WordPress 로고)를 담은, 그 자체로는 정상(200) 이미지를
+반환한다. 프런트엔드의 `<img>`/`Image()` 로더 입장에서는 로드 성공이라 카드가 영영 그 플레이스홀더에
+머무는 문제가 있었다.
+1. `GET /api/services`는 각 서비스의 `imageUrl`을 `/api/service-image/:id` 경로로 치환해서 내려준다
+   (카탈로그에 저장된 원래 문자열은 더 이상 쓰이지 않는 유휴 필드다).
+2. `GET /api/service-image/:id`: id로 전체 셔플(`findServiceById`, `shuffles.ts`)에서 서비스를 찾고,
+   - 디스크 캐시(`IMAGE_CACHE_DIR`, 기본 OS 임시 디렉터리, 파일명은 `serviceUrl`의 sha256)에 적중하면
+     그대로 서빙한다.
+   - 캐시 미스면 microlink.io 스크린샷 API(`?screenshot=true`, 인증 불필요, 동기 응답)로 실제 화면을
+     한 번 가져와 캐시에 저장하고 서빙한다.
+   - 스크린샷 API 호출이 실패/타임아웃(9초)하면 서비스명 이니셜 + 그라디언트 SVG를 생성해 대신
+     반환한다(브라우저의 깨진 이미지 아이콘 대신 항상 유효한 이미지를 보장).
+3. 프런트엔드(`apps/web/src/app.ts`)는 `resolveImageUrl()`로 `/`로 시작하는 상대 경로에 API 베이스를
+   붙여서 사용한다(카드 배경, 결과 화면 리스트 썸네일 공통).
+
 ## 6. 데이터 모델
 
 ### 6.1 `CatalogService` (`apps/api/src/catalog.ts`)

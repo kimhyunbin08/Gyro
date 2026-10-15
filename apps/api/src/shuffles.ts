@@ -45,3 +45,11 @@ export function filterByTier(services: CatalogService[], tier: unknown): Catalog
 export function allShuffleServices(): CatalogService[] {
   return SHUFFLE_IDS.flatMap((id) => catalogsByShuffle[id]);
 }
+
+let serviceById: Map<string, CatalogService> | null = null;
+// GET /api/service-image/:id (image-proxy route) needs to resolve a service's
+// real serviceUrl from only its id, regardless of which shuffle it lives in.
+export function findServiceById(id: string): CatalogService | undefined {
+  if (!serviceById) serviceById = new Map(allShuffleServices().map((service) => [service.id, service]));
+  return serviceById.get(id);
+}

@@ -17,6 +17,12 @@ async function resolveApiBase(): Promise<string> {
   return (import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/$/, '');
 }
 const API = await resolveApiBase();
+// /api/services now returns imageUrl as a path on our own image-proxy route
+// (see apps/api/src/image-proxy.ts) rather than a full external URL, so it
+// needs the resolved API origin prefixed before it's usable as an <img src>.
+export function resolveImageUrl(imageUrl: string): string {
+  return imageUrl.startsWith('/') ? `${API}${imageUrl}` : imageUrl;
+}
 const sessionId = crypto.randomUUID();
 // Swiping through all ~98 services in one sitting is exhausting, so cards are
 // shown in rounds of BATCH_SIZE; each round ends on an interim results
@@ -177,8 +183,8 @@ function renderCard(){
   stage.innerHTML = `<article class="service-card image-fallback"><span class="service-card-initial" aria-hidden="true">${service.name.charAt(0)}</span><span class="swipe-stamp like" aria-hidden="true">관심 있음</span><span class="swipe-stamp nope" aria-hidden="true">관심 없음</span><div class="service-copy"><div class="service-tags">${service.tags.map(t=>`<span>${t}</span>`).join('')}</div><h3>${service.name}</h3><p>${service.tagline}</p><p class="service-reason">✨ ${recommendationReason(service)}</p><button class="preview-button" type="button" data-preview>미리보기 ⤢</button></div></article>`;
   const card = stage.querySelector<HTMLElement>('.service-card')!;
   const preload = new Image();
-  preload.onload = () => { card.style.backgroundImage = `url('${service.imageUrl}')`; card.classList.remove('image-fallback'); };
-  preload.src = service.imageUrl;
+  preload.onload = () => { card.style.backgroundImage = `url('${resolveImageUrl(service.imageUrl)}')`; card.classList.remove('image-fallback'); };
+  preload.src = resolveImageUrl(service.imageUrl);
   card.querySelector<HTMLButtonElement>('[data-preview]')!.onclick = (e) => { e.stopPropagation(); openPreview(service); };
   bindCardGestures(card);
   bindWheelGestures(card);
@@ -251,7 +257,7 @@ function finishBatch(){
   const remaining = services.length - index;
   track('result_view',{likedCount:liked.length,remaining});
   show('results');
-  $('result-list').innerHTML=liked.length?liked.map(s=>`<article class="result-item"><div class="result-main"><img src="${s.imageUrl}" alt=""><div><h3>${s.name}</h3><p>${s.tagline}</p><div class="result-links"><a href="${s.serviceUrl}" target="_blank" rel="noreferrer" data-service="${s.id}">서비스 열어보기 →</a><button class="result-preview-button" type="button" data-preview-result="${s.id}">미리보기</button></div></div></div>${feedbackWidgetHtml(s.id)}</article>`).join(''):'<p class="lede">아직 관심 표시한 서비스가 없어요. 다시 둘러보며 새로운 가능성을 찾아보세요.</p>';
+  $('result-list').innerHTML=liked.length?liked.map(s=>`<article class="result-item"><div class="result-main"><img src="${resolveImageUrl(s.imageUrl)}" alt=""><div><h3>${s.name}</h3><p>${s.tagline}</p><div class="result-links"><a href="${s.serviceUrl}" target="_blank" rel="noreferrer" data-service="${s.id}">서비스 열어보기 →</a><button class="result-preview-button" type="button" data-preview-result="${s.id}">미리보기</button></div></div></div>${feedbackWidgetHtml(s.id)}</article>`).join(''):'<p class="lede">아직 관심 표시한 서비스가 없어요. 다시 둘러보며 새로운 가능성을 찾아보세요.</p>';
   document.querySelectorAll<HTMLAnchorElement>('[data-service]').forEach(a=>a.onclick=()=>track('service_click',{serviceId:a.dataset.service}));
   document.querySelectorAll<HTMLButtonElement>('[data-preview-result]').forEach(b=>{
     const matched = liked.find(s=>s.id===b.dataset.previewResult);
