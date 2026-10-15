@@ -20,7 +20,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "1"
+    "number": "1",
+    "tier": "mainstream"
   },
   {
     "id": "dating-2",
@@ -41,7 +42,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "2"
+    "number": "2",
+    "tier": "mainstream"
   },
   {
     "id": "dating-3",
@@ -62,7 +64,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "3"
+    "number": "3",
+    "tier": "mainstream"
   },
   {
     "id": "dating-4",
@@ -83,7 +86,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "4"
+    "number": "4",
+    "tier": "mainstream"
   },
   {
     "id": "dating-5",
@@ -104,7 +108,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "5"
+    "number": "5",
+    "tier": "mainstream"
   },
   {
     "id": "dating-6",
@@ -125,7 +130,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "6"
+    "number": "6",
+    "tier": "mainstream"
   },
   {
     "id": "dating-7",
@@ -146,7 +152,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "7"
+    "number": "7",
+    "tier": "mainstream"
   },
   {
     "id": "dating-8",
@@ -167,7 +174,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "8"
+    "number": "8",
+    "tier": "mainstream"
   },
   {
     "id": "dating-9",
@@ -189,7 +197,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "9"
+    "number": "9",
+    "tier": "mainstream"
   },
   {
     "id": "dating-10",
@@ -210,7 +219,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "10"
+    "number": "10",
+    "tier": "mainstream"
   },
   {
     "id": "dating-11",
@@ -231,7 +241,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "11"
+    "number": "11",
+    "tier": "mainstream"
   },
   {
     "id": "dating-12",
@@ -253,7 +264,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "12"
+    "number": "12",
+    "tier": "mainstream"
   },
   {
     "id": "dating-13",
@@ -275,7 +287,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "13"
+    "number": "13",
+    "tier": "mainstream"
   },
   {
     "id": "dating-14",
@@ -296,7 +309,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "14"
+    "number": "14",
+    "tier": "mainstream"
   },
   {
     "id": "dating-15",
@@ -317,7 +331,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "15"
+    "number": "15",
+    "tier": "mainstream"
   },
   {
     "id": "dating-16",
@@ -339,7 +354,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "16"
+    "number": "16",
+    "tier": "mainstream"
   },
   {
     "id": "dating-17",
@@ -359,7 +375,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "17"
+    "number": "17",
+    "tier": "mainstream"
   },
   {
     "id": "dating-18",
@@ -381,7 +398,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "18"
+    "number": "18",
+    "tier": "mainstream"
   },
   {
     "id": "dating-19",
@@ -403,7 +421,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "19"
+    "number": "19",
+    "tier": "mainstream"
   },
   {
     "id": "dating-20",
@@ -425,7 +444,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "20"
+    "number": "20",
+    "tier": "mainstream"
   },
   {
     "id": "dating-21",
@@ -447,7 +467,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "21"
+    "number": "21",
+    "tier": "mainstream"
   },
   {
     "id": "dating-22",
@@ -468,7 +489,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "22"
+    "number": "22",
+    "tier": "mainstream"
   },
   {
     "id": "dating-23",
@@ -489,7 +511,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "23"
+    "number": "23",
+    "tier": "mainstream"
   },
   {
     "id": "dating-24",
@@ -511,7 +534,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "24"
+    "number": "24",
+    "tier": "mainstream"
   },
   {
     "id": "dating-25",
@@ -533,7 +557,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "25"
+    "number": "25",
+    "tier": "mainstream"
   },
   {
     "id": "dating-26",
@@ -555,7 +580,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "26"
+    "number": "26",
+    "tier": "mainstream"
   },
   {
     "id": "dating-27",
@@ -576,7 +602,8 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "27"
+    "number": "27",
+    "tier": "mainstream"
   },
   {
     "id": "dating-28",
@@ -598,6 +625,228 @@ export const datingCatalog: CatalogService[] = [
     ],
     "room": "연애",
     "roomKey": "dating",
-    "number": "28"
-  }
+    "number": "28",
+    "tier": "mainstream"
+  },
+
+  {
+    "id": "dating-29",
+    "name": "스카이피플",
+    "tagline": "학교·직장 인증으로 만나는 신뢰 기반 소개팅",
+    "description": "재직증명서나 졸업 인증 등 엄격한 신원 확인 절차를 거친 회원들만 가입할 수 있는 프리미엄 소개팅 앱입니다. 지인 노출 차단 기능과 꼼꼼한 프로필 검증을 통해 허위 프로필 없이 진지한 만남을 찾도록 돕습니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.skypeople.me%2F?w=1200",
+    "serviceUrl": "https://www.skypeople.me/",
+    "tags": [
+      "소개팅",
+      "본인인증",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "연애",
+    "roomKey": "dating",
+    "number": "29",
+    "tier": "emerging"
+  },
+  {
+    "id": "dating-30",
+    "name": "은하수다방",
+    "tagline": "돌싱과 만혼을 위한 재혼 전문 매칭",
+    "description": "이혼이나 사별 등으로 혼자가 된 이들과 결혼이 늦은 미혼을 위해 설계된 재혼 특화 소개팅 앱입니다. 서류 기반 신분 인증으로 허위 계정을 걸러내고, 하루 정해진 시간마다 새로운 상대를 추천해줍니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.eundabang.com?w=1200",
+    "serviceUrl": "https://www.eundabang.com",
+    "tags": [
+      "매칭",
+      "본인인증",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "연애",
+    "roomKey": "dating",
+    "number": "30",
+    "tier": "emerging"
+  },
+  {
+    "id": "dating-31",
+    "name": "너랑나랑",
+    "tagline": "토너먼트로 이상형을 고르는 게임형 소개팅",
+    "description": "매일 소개되는 다수의 이성을 토너먼트 방식으로 단계별로 골라나가며 최종 이상형을 찾는 독특한 소개팅 앱입니다. 서로가 선택하면 추가 결제 없이 바로 채팅으로 연결되는 구조가 특징입니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.endressdreamky.loveting%26hl%3Dko?w=1200",
+    "serviceUrl": "https://play.google.com/store/apps/details?id=com.endressdreamky.loveting&hl=ko",
+    "tags": [
+      "소개팅",
+      "매칭",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "연애",
+    "roomKey": "dating",
+    "number": "31",
+    "tier": "emerging"
+  },
+  {
+    "id": "dating-32",
+    "name": "Eight: Smile, Video & Date",
+    "tagline": "사진 없이, 30초 영상으로 시작하는 만남",
+    "description": "프로필 사진이나 긴 자기소개 대신 앱 안에서 직접 촬영한 30초 영상으로만 자신을 소개하는 영상 중심 데이팅 서비스입니다. 서로 호감을 표시하면 곧바로 8분짜리 실시간 화상 통화로 연결되어 빠르게 진짜 대화를 나눌 수 있습니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Feightdating.com%2F?w=1200",
+    "serviceUrl": "https://eightdating.com/",
+    "tags": [
+      "매칭",
+      "본인인증",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "연애",
+    "roomKey": "dating",
+    "number": "32",
+    "tier": "emerging"
+  },
+  {
+    "id": "dating-33",
+    "name": "Smitten",
+    "tagline": "스와이프 대신 게임으로 친해지는 데이팅",
+    "description": "성격 퀴즈, 거짓말 찾기 같은 미니게임을 통해 상대의 성향과 취향을 자연스럽게 알아가도록 설계된 아이슬란드 출신 데이팅 앱입니다. 사진보다 대화와 재미를 우선시해 가벼운 긴장감 없이 호감을 쌓을 수 있습니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fsmittendating.com%2F?w=1200",
+    "serviceUrl": "https://smittendating.com/",
+    "tags": [
+      "매칭",
+      "커뮤니티",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "연애",
+    "roomKey": "dating",
+    "number": "33",
+    "tier": "emerging"
+  },
+  {
+    "id": "dating-34",
+    "name": "Meet5",
+    "tagline": "1대1 대신 소그룹으로 만나는 모임형 만남",
+    "description": "1:1 데이트 대신 등산, 식사, 볼링 등 소규모 그룹 활동에 참여해 자연스럽게 새로운 사람들과 어울리도록 돕는 독일발 소셜 매칭 앱입니다. 공개된 장소에서 여러 명이 함께 만나는 구조로 부담 없이 인연을 넓힐 수 있습니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.meet5.de%2F?w=1200",
+    "serviceUrl": "https://www.meet5.de/",
+    "tags": [
+      "커뮤니티",
+      "매칭",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "연애",
+    "roomKey": "dating",
+    "number": "34",
+    "tier": "emerging"
+  },
+  {
+    "id": "dating-35",
+    "name": "Keeper",
+    "tagline": "AI와 사람이 함께 검증하는 진지한 만남 매칭",
+    "description": "가벼운 만남이 아닌 결혼을 전제로 한 진지한 관계를 원하는 사람들을 위해 AI 궁합 분석과 사람 매니저의 검토를 함께 거쳐 상대를 소개하는 매치메이킹 서비스입니다. 소개마다 깐깐한 검증 과정을 거쳐 신뢰도를 높인 것이 특징입니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.keeper.ai%2F?w=1200",
+    "serviceUrl": "https://www.keeper.ai/",
+    "tags": [
+      "매칭",
+      "본인인증",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "연애",
+    "roomKey": "dating",
+    "number": "35",
+    "tier": "emerging"
+  },
+  {
+    "id": "dating-36",
+    "name": "Thursday",
+    "tagline": "매주 목요일, 오프라인 모임으로 만나는 싱글들",
+    "description": "온라인 스와이프 대신 매주 목요일 하루에만 집중해 실제 오프라인 싱글 모임과 이벤트로 사람을 연결하는 데이팅 서비스입니다. 정해진 요일에 직접 만나는 방식으로 끝없는 메시지 교환 없이 빠르게 실제 만남으로 이어집니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fthursdaydating.com?w=1200",
+    "serviceUrl": "https://thursdaydating.com",
+    "tags": [
+      "커뮤니티",
+      "소개팅",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "연애",
+    "roomKey": "dating",
+    "number": "36",
+    "tier": "emerging"
+  },
+  {
+    "id": "dating-37",
+    "name": "Wable",
+    "tagline": "신경다양성을 위한 안전한 관계 맺기 공간",
+    "description": "자폐 스펙트럼 등 신경다양성을 가진 이용자들이 감각 친화적인 환경에서 편안하게 연애와 우정을 쌓을 수 있도록 설계된 해외 데이팅·커뮤니티 앱입니다. 엄격한 안전 정책과 맞춤 지원 콘텐츠로 포용적인 만남을 지향합니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.hellowable.com%2F?w=1200",
+    "serviceUrl": "https://www.hellowable.com/",
+    "tags": [
+      "매칭",
+      "커뮤니티",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "연애",
+    "roomKey": "dating",
+    "number": "37",
+    "tier": "emerging"
+  },
+  {
+    "id": "dating-38",
+    "name": "Schmooze",
+    "tagline": "밈 취향으로 통하는 유머 기반 데이팅",
+    "description": "서로 공유한 밈과 유머 코드를 바탕으로 궁합을 찾아주는 독특한 콘셉트의 데이팅 앱입니다. 진지한 자기소개보다 가벼운 농담과 밈 반응으로 대화를 시작해 자연스럽게 친밀감을 쌓도록 돕습니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.schmooze.in%2F?w=1200",
+    "serviceUrl": "https://www.schmooze.in/",
+    "tags": [
+      "매칭",
+      "커뮤니티",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "연애",
+    "roomKey": "dating",
+    "number": "38",
+    "tier": "emerging"
+  },
 ];

@@ -27,6 +27,20 @@ export function resolveShuffleCatalog(shuffle: unknown): CatalogService[] {
   return catalogsByShuffle[isShuffleId(shuffle) ? shuffle : DEFAULT_SHUFFLE];
 }
 
+export const SERVICE_TIERS = ['mainstream', 'emerging'] as const;
+export type ServiceTier = (typeof SERVICE_TIERS)[number];
+
+// prd.md §9-4 #7: theme shuffles mix already-huge "주류" services with
+// smaller, growing "비주류" startups. The tier selection screen lets users
+// filter to one or the other, or skip it entirely to see both (no `tier`
+// query param, or an unrecognized value, means "no filtering"). Entries
+// without an explicit `tier` (e.g. the vibe-venture catalog, which predates
+// this concept) are treated as 'mainstream'.
+export function filterByTier(services: CatalogService[], tier: unknown): CatalogService[] {
+  if (tier !== 'mainstream' && tier !== 'emerging') return services;
+  return services.filter((service) => (service.tier ?? 'mainstream') === tier);
+}
+
 // 랭킹/퍼널 집계는 셔플을 구분하지 않고 전체 서비스를 대상으로 한다(prd.md §9-4 #6).
 export function allShuffleServices(): CatalogService[] {
   return SHUFFLE_IDS.flatMap((id) => catalogsByShuffle[id]);

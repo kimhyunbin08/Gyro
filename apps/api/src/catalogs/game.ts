@@ -20,7 +20,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "1"
+    "number": "1",
+    "tier": "mainstream"
   },
   {
     "id": "game-2",
@@ -41,7 +42,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "2"
+    "number": "2",
+    "tier": "mainstream"
   },
   {
     "id": "game-3",
@@ -62,7 +64,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "3"
+    "number": "3",
+    "tier": "mainstream"
   },
   {
     "id": "game-4",
@@ -82,7 +85,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "4"
+    "number": "4",
+    "tier": "mainstream"
   },
   {
     "id": "game-5",
@@ -103,7 +107,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "5"
+    "number": "5",
+    "tier": "mainstream"
   },
   {
     "id": "game-6",
@@ -125,7 +130,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "6"
+    "number": "6",
+    "tier": "mainstream"
   },
   {
     "id": "game-7",
@@ -146,7 +152,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "7"
+    "number": "7",
+    "tier": "mainstream"
   },
   {
     "id": "game-8",
@@ -167,7 +174,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "8"
+    "number": "8",
+    "tier": "mainstream"
   },
   {
     "id": "game-9",
@@ -188,7 +196,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "9"
+    "number": "9",
+    "tier": "mainstream"
   },
   {
     "id": "game-10",
@@ -210,7 +219,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "10"
+    "number": "10",
+    "tier": "mainstream"
   },
   {
     "id": "game-11",
@@ -231,7 +241,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "11"
+    "number": "11",
+    "tier": "mainstream"
   },
   {
     "id": "game-12",
@@ -252,7 +263,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "12"
+    "number": "12",
+    "tier": "mainstream"
   },
   {
     "id": "game-13",
@@ -273,7 +285,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "13"
+    "number": "13",
+    "tier": "mainstream"
   },
   {
     "id": "game-14",
@@ -294,7 +307,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "14"
+    "number": "14",
+    "tier": "mainstream"
   },
   {
     "id": "game-15",
@@ -315,7 +329,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "15"
+    "number": "15",
+    "tier": "mainstream"
   },
   {
     "id": "game-16",
@@ -336,7 +351,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "16"
+    "number": "16",
+    "tier": "mainstream"
   },
   {
     "id": "game-17",
@@ -357,7 +373,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "17"
+    "number": "17",
+    "tier": "mainstream"
   },
   {
     "id": "game-18",
@@ -378,7 +395,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "18"
+    "number": "18",
+    "tier": "mainstream"
   },
   {
     "id": "game-19",
@@ -400,7 +418,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "19"
+    "number": "19",
+    "tier": "mainstream"
   },
   {
     "id": "game-20",
@@ -422,7 +441,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "20"
+    "number": "20",
+    "tier": "mainstream"
   },
   {
     "id": "game-21",
@@ -443,7 +463,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "21"
+    "number": "21",
+    "tier": "mainstream"
   },
   {
     "id": "game-22",
@@ -464,7 +485,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "22"
+    "number": "22",
+    "tier": "mainstream"
   },
   {
     "id": "game-23",
@@ -486,7 +508,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "23"
+    "number": "23",
+    "tier": "mainstream"
   },
   {
     "id": "game-24",
@@ -507,7 +530,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "24"
+    "number": "24",
+    "tier": "mainstream"
   },
   {
     "id": "game-25",
@@ -528,7 +552,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "25"
+    "number": "25",
+    "tier": "mainstream"
   },
   {
     "id": "game-26",
@@ -549,7 +574,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "26"
+    "number": "26",
+    "tier": "mainstream"
   },
   {
     "id": "game-27",
@@ -570,7 +596,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "27"
+    "number": "27",
+    "tier": "mainstream"
   },
   {
     "id": "game-28",
@@ -591,7 +618,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "28"
+    "number": "28",
+    "tier": "mainstream"
   },
   {
     "id": "game-29",
@@ -612,7 +640,8 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "29"
+    "number": "29",
+    "tier": "mainstream"
   },
   {
     "id": "game-30",
@@ -633,6 +662,228 @@ export const gameCatalog: CatalogService[] = [
     ],
     "room": "게임",
     "roomKey": "game",
-    "number": "30"
-  }
+    "number": "30",
+    "tier": "mainstream"
+  },
+
+  {
+    "id": "game-31",
+    "name": "Backpack Battles",
+    "tagline": "가방 속 아이템 배치로 승부하는 전략 배틀러",
+    "description": "플레이어가 가방 안에 아이템을 사고 조합하고 배치해 나만의 빌드를 만드는 비동기 대전 게임이다. 아이템 궁합과 위치 전략이 승패를 가르며, 꾸준한 업데이트로 얼리 액세스 기간 동안 성장해온 인디 타이틀이다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fstore.steampowered.com%2Fapp%2F2427700%2FBackpack_Battles%2F?w=1200",
+    "serviceUrl": "https://store.steampowered.com/app/2427700/Backpack_Battles/",
+    "tags": [
+      "전략",
+      "캐주얼",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "게임",
+    "roomKey": "game",
+    "number": "31",
+    "tier": "emerging"
+  },
+  {
+    "id": "game-32",
+    "name": "Lethal Company",
+    "tagline": "버려진 위성을 뒤지는 괴짜 협동 공포 게임",
+    "description": "친구들과 함께 버려진 달과 폐건물을 탐험하며 고철을 모아 회사에 팔아넘기는 협동 서바이벌 호러 게임이다. 아기자기한 그래픽과 달리 예측 불가능한 괴물과 상황이 긴장감과 웃음을 동시에 준다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fstore.steampowered.com%2Fapp%2F1966720%2FLethal_Company%2F?w=1200",
+    "serviceUrl": "https://store.steampowered.com/app/1966720/Lethal_Company/",
+    "tags": [
+      "멀티플레이어",
+      "커뮤니티",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "게임",
+    "roomKey": "game",
+    "number": "32",
+    "tier": "emerging"
+  },
+  {
+    "id": "game-33",
+    "name": "PEAK",
+    "tagline": "넷이서 함께 오르는 절벽 생존 협동극",
+    "description": "최대 네 명이 팀을 이뤄 추락 후 거대한 산을 기어오르는 협동 등반 게임이다. 체력, 허기, 날씨 같은 변수 속에서 서로를 돕는 타이밍 플레이가 핵심이며, 출시와 동시에 큰 화제를 모은 소규모 스튜디오의 작품이다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fstore.steampowered.com%2Fapp%2F3527290%2FPEAK%2F?w=1200",
+    "serviceUrl": "https://store.steampowered.com/app/3527290/PEAK/",
+    "tags": [
+      "멀티플레이어",
+      "캐주얼",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "게임",
+    "roomKey": "game",
+    "number": "33",
+    "tier": "emerging"
+  },
+  {
+    "id": "game-34",
+    "name": "WEBFISHING",
+    "tagline": "낚시하며 수다 떠는 아늑한 동물 세계",
+    "description": "동물 캐릭터가 되어 낚시를 하고 캠프에 모여 잡담을 나누는 소셜 샌드박스 게임이다. 혼자서도, 여럿이서도 즐길 수 있으며 느긋한 분위기와 친근한 커뮤니티 문화로 입소문을 탄 1인 개발 인디작이다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fstore.steampowered.com%2Fapp%2F3146520%2FWEBFISHING%2F?w=1200",
+    "serviceUrl": "https://store.steampowered.com/app/3146520/WEBFISHING/",
+    "tags": [
+      "캐주얼",
+      "커뮤니티",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "게임",
+    "roomKey": "game",
+    "number": "34",
+    "tier": "emerging"
+  },
+  {
+    "id": "game-35",
+    "name": "R.E.P.O.",
+    "tagline": "깨지기 쉬운 보물을 나르는 협동 공포극",
+    "description": "최대 여섯 명이 로봇 작업자가 되어 유령 들린 장소에서 값비싼 물건을 조심스럽게 운반해 돈을 버는 협동 호러 게임이다. 물리 엔진 기반의 엉뚱한 사고와 괴물의 위협이 뒤섞여 독특한 긴장감을 만들어낸다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fstore.steampowered.com%2Fapp%2F3241660%2FREPO%2F?w=1200",
+    "serviceUrl": "https://store.steampowered.com/app/3241660/REPO/",
+    "tags": [
+      "멀티플레이어",
+      "커뮤니티",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "게임",
+    "roomKey": "game",
+    "number": "35",
+    "tier": "emerging"
+  },
+  {
+    "id": "game-36",
+    "name": "Balatro",
+    "tagline": "카드 조합으로 쌓아가는 중독성 로그라이크",
+    "description": "포커 족보를 기반으로 조커 카드를 조합해 점수를 극대화하는 덱빌딩 로그라이크 게임이다. 한 번의 플레이가 짧지만 빌드 전략의 경우의 수가 방대해 반복 플레이의 재미가 크다는 평가를 받고 있다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fstore.steampowered.com%2Fapp%2F2379780%2FBalatro%2F?w=1200",
+    "serviceUrl": "https://store.steampowered.com/app/2379780/Balatro/",
+    "tags": [
+      "전략",
+      "캐주얼",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "게임",
+    "roomKey": "game",
+    "number": "36",
+    "tier": "emerging"
+  },
+  {
+    "id": "game-37",
+    "name": "Content Warning",
+    "tagline": "괴물을 찍어 조회수 버는 괴짜 협동 촬영기",
+    "description": "친구들과 잠수종을 타고 이상한 세계로 내려가 괴물과 기이한 현상을 카메라로 촬영해 가상의 영상 플랫폼에 올리는 협동 게임이다. 조회수를 많이 얻을수록 보상이 커지는 구조라 위험을 감수하는 플레이가 유도된다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fstore.steampowered.com%2Fapp%2F2881650%2FContent_Warning%2F?w=1200",
+    "serviceUrl": "https://store.steampowered.com/app/2881650/Content_Warning/",
+    "tags": [
+      "멀티플레이어",
+      "캐주얼",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "게임",
+    "roomKey": "game",
+    "number": "37",
+    "tier": "emerging"
+  },
+  {
+    "id": "game-38",
+    "name": "SANABI (산나비)",
+    "tagline": "사슬팔로 질주하는 한국형 사이버펑크 액션",
+    "description": "조선과 사이버펑크를 결합한 독특한 세계관 위에서 기계 팔을 와이어처럼 사용해 빠르게 이동하며 전투하는 2D 액션 플랫포머다. 소규모 한국 개발팀이 만든 작품으로 탄탄한 스토리와 손맛 있는 조작감으로 호평받았다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fstore.steampowered.com%2Fapp%2F1226430%2FSANABI%2F?w=1200",
+    "serviceUrl": "https://store.steampowered.com/app/1226430/SANABI/",
+    "tags": [
+      "전략",
+      "캐주얼",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "게임",
+    "roomKey": "game",
+    "number": "38",
+    "tier": "emerging"
+  },
+  {
+    "id": "game-39",
+    "name": "Cult of the Lamb",
+    "tagline": "귀여운 양이 교주가 되는 로그라이크 경영극",
+    "description": "플레이어가 작은 양이 되어 자신만의 신도 공동체를 세우고 던전을 탐험하는 액션 로그라이크와 기지 경영이 결합된 게임이다. 아기자기하면서도 어두운 분위기의 아트 스타일로 꾸준한 팬층을 유지하고 있다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fstore.steampowered.com%2Fapp%2F1313140%2FCult_of_the_Lamb%2F?w=1200",
+    "serviceUrl": "https://store.steampowered.com/app/1313140/Cult_of_the_Lamb/",
+    "tags": [
+      "전략",
+      "캐주얼",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "게임",
+    "roomKey": "game",
+    "number": "39",
+    "tier": "emerging"
+  },
+  {
+    "id": "game-40",
+    "name": "Overwolf",
+    "tagline": "게임 모드와 오버레이 앱을 만드는 창작자 허브",
+    "description": "게임 플레이 중 띄울 수 있는 오버레이 앱과 모드를 개발자들이 직접 만들고 배포해 수익화할 수 있도록 돕는 게임 어드레스 플랫폼이다. 전 세계 여러 게임 커뮤니티의 창작자들이 모여 툴과 모드를 공유하는 생태계를 이루고 있다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.overwolf.com%2F?w=1200",
+    "serviceUrl": "https://www.overwolf.com/",
+    "tags": [
+      "커뮤니티",
+      "멀티플레이어",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "게임",
+    "roomKey": "game",
+    "number": "40",
+    "tier": "emerging"
+  },
 ];
