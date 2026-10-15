@@ -48,6 +48,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/docs/specs-azure-mvp'
     environment: staging
+    permissions:
+      id-token: write
+      contents: read
     env:
       RESOURCE_GROUP: rg-staging
       API_APP: ca-api-5kodng4nv464w
@@ -59,7 +62,9 @@ jobs:
       - name: Azure Login
         uses: azure/login@v1
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Resolve app FQDNs
         run: |
@@ -96,6 +101,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     environment: production
+    permissions:
+      id-token: write
+      contents: read
     env:
       RESOURCE_GROUP: rg-production
       API_APP: ca-api-du6ob5u24hia6
@@ -107,7 +115,9 @@ jobs:
       - name: Azure Login
         uses: azure/login@v1
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Resolve app FQDNs
         run: |
