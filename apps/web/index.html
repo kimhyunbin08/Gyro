@@ -69,18 +69,26 @@
         </div>
       </section>
 
-      <!-- Embedded service preview: an iframe modal so users can try a
-           service without leaving Gyro. Many student sites block framing
-           (X-Frame-Options/CSP), so a visible "새 탭에서 열기" escape hatch and
-           a load-timeout fallback message are always available. -->
+      <!-- Embedded service preview: an article-style modal (prd.md §9-3 /
+           ideation.md §9) showing name → one-line description → the
+           embedded iframe, in that order, inside a still-scrollable dialog.
+           Many student sites block framing (X-Frame-Options/CSP), so a
+           visible "새 탭에서 열기" escape hatch and a load-timeout fallback
+           message are always available. -->
       <div class="preview-overlay hidden" id="preview-overlay" role="dialog" aria-modal="true" aria-label="서비스 미리보기">
         <div class="preview-bar">
           <span class="preview-title" id="preview-title"></span>
           <a class="preview-open-new" id="preview-open-new" target="_blank" rel="noreferrer">새 탭에서 열기 ↗</a>
           <button class="preview-close" id="preview-close" aria-label="미리보기 닫기">×</button>
         </div>
-        <iframe class="preview-frame" id="preview-frame" title="서비스 미리보기"></iframe>
-        <p class="preview-fallback hidden" id="preview-fallback">이 서비스는 미리보기를 지원하지 않아요. 새 탭에서 열어보세요.</p>
+        <div class="preview-article">
+          <h2 class="preview-article-title" id="preview-article-title"></h2>
+          <p class="preview-article-desc" id="preview-article-desc"></p>
+          <div class="preview-frame-wrap">
+            <iframe class="preview-frame" id="preview-frame" title="서비스 미리보기"></iframe>
+            <p class="preview-fallback hidden" id="preview-fallback">이 서비스는 미리보기를 지원하지 않아요. 새 탭에서 열어보세요.</p>
+          </div>
+        </div>
         <!-- Phase 2 draft (prd.md §14.3): optional single-question retry
              intent check shown when a preview is closed. Skippable and
              auto-closes after a short timeout so it never strands users. -->

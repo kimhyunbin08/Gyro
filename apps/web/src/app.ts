@@ -279,6 +279,8 @@ function openPreview(service: Service){
   previewService = service;
   previewOpenedAt = Date.now();
   $('preview-title').textContent = service.name;
+  $('preview-article-title').textContent = service.name;
+  $('preview-article-desc').textContent = service.tagline;
   $<HTMLAnchorElement>('preview-open-new').href = service.serviceUrl;
   const frame = $<HTMLIFrameElement>('preview-frame');
   const fallback = $('preview-fallback');
