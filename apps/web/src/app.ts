@@ -263,10 +263,24 @@ function finishBatch(){
 // the frame never finishes loading.
 let previewLoadTimer: number | undefined;
 let previewService: Service | null = null;
+let previewOpenedAt = 0;
+// prd.md §14.3.3 / trd.md §10.1: bucket dwell time (open → close) instead of
+// reporting a raw duration, so the funnel report stays a coarse directional
+// signal (not a precise tracking metric) per the "집계 통계" principle.
+function dwellBucket(ms:number):string{
+  if(ms<5000)return'<5s';
+  if(ms<15000)return'5-15s';
+  if(ms<30000)return'15-30s';
+  if(ms<60000)return'30-60s';
+  return'60s+';
+}
 function openPreview(service: Service){
   track('service_click',{serviceId:service.id,mode:'embed'});
   previewService = service;
+  previewOpenedAt = Date.now();
   $('preview-title').textContent = service.name;
+  $('preview-article-title').textContent = service.name;
+  $('preview-article-desc').textContent = service.tagline;
   $<HTMLAnchorElement>('preview-open-new').href = service.serviceUrl;
   const frame = $<HTMLIFrameElement>('preview-frame');
   const fallback = $('preview-fallback');
@@ -289,6 +303,11 @@ function openPreview(service: Service){
 let retryIntentTimer: number | undefined;
 function requestClosePreview(){
   if (!previewService) { closePreview(); return; }
+  // Dwell time is recorded once, right as the user initiates closing (button,
+  // Escape, or the preview-open timeout below) — regardless of whether they
+  // go on to answer/skip the retry-intent question — so every preview close
+  // contributes a bucket, not just the ones with an answered follow-up.
+  track('service_click',{serviceId:previewService.id,mode:'embed',stage:'preview_close',dwellBucket:dwellBucket(Date.now()-previewOpenedAt)});
   window.clearTimeout(previewLoadTimer);
   $<HTMLIFrameElement>('preview-frame').classList.add('hidden');
   $('preview-fallback').classList.add('hidden');

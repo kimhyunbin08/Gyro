@@ -189,6 +189,7 @@ type FunnelEntry = {
   id: string; name: string; impressions: number; likes: number; dislikes: number; skips: number;
   previewClicks: number; dislikeReasons: Record<string, number>;
   retryIntent: { yes: number; no: number; unsure: number };
+  dwellBuckets: Record<string, number>;
 };
 ```
 `GET /api/services/funnel`은 §6.5와 마찬가지로 §6.3 이벤트 배열의 실시간 재집계 값이며, 별도
@@ -204,7 +205,7 @@ type FunnelEntry = {
 | `GET /health` | 컨테이너 헬스체크 | - | `{ status: 'ok', service, timestamp }` |
 | `GET /api/services` | 헬스체크 통과 + 중복 제거된 카탈로그 | - | `{ services: Service[] }` |
 | `GET /api/services/ranking` | 누적 `card_like` 횟수 기준 상위 `RANKING_LIMIT`(20)개 서비스 랭킹 | - | `{ ranking: RankingEntry[] }` |
-| `GET /api/services/funnel` | 서비스별 노출/관심 있음/관심 없음/건너뛰기/미리보기 클릭/이유 태그/재체험 의향 집계 | - | `{ funnel: FunnelEntry[] }` |
+| `GET /api/services/funnel` | 서비스별 노출/관심 있음/관심 없음/건너뛰기/미리보기 클릭/이유 태그/재체험 의향/체류시간 버킷 집계 | - | `{ funnel: FunnelEntry[] }` |
 | `POST /api/events` | 퍼널 이벤트 적재 | Zod(`eventSchema`) | `202 { accepted: true }` / `400` |
 | `POST /api/email-leads` | 이메일 리드 저장 | Zod(`emailSchema`) | `201` / `409` 중복 / `400` |
 
@@ -212,9 +213,9 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
 
 ## 8. 테스트 전략
 - API: Vitest + Supertest. `apps/api/tests/integration.gyro.test.ts`(엔드포인트 통합, `card_dislike`/
-  `service_click`의 `reason`/`retryIntent` 후속 이벤트 수락과 `GET /api/services/funnel` 집계
-  이중 집계 방지 포함), `apps/api/tests/unit.health-check.test.ts`(헬스체크 캐시/폴백/테스트 환경
-  단축 경로).
+  `service_click`의 `reason`/`retryIntent`/`dwellBucket` 후속 이벤트 수락과 `GET /api/services/funnel`
+  집계 이중 집계 방지 포함), `apps/api/tests/unit.health-check.test.ts`(헬스체크 캐시/폴백/테스트
+  환경 단축 경로).
 - Web: Vitest + jsdom. `apps/web/tests/catalog-load.unit.test.ts`(시작 버튼 경쟁 조건 가드),
   `apps/web/tests/match-score.unit.test.ts`(`matchScore`/`matchedInterestTags` 가중치 분리 검증).
 - 모든 테스트는 `NODE_ENV=test`에서 외부 네트워크 호출 없이 동작해야 한다.
@@ -240,7 +241,11 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
   `DISLIKE_REASONS`). 이중 집계를 막기 위해 `metadata.stage: 'reason_tag'`도 함께 보낸다.
 - `service_click` 이벤트의 `metadata`에 `retryIntent?: 'yes' | 'no' | 'unsure'` 필드를 추가한다
   (동일하게 스키마 변경 불필요), `metadata.stage: 'preview_close'`로 기본 미리보기-클릭 이벤트와
-  구분한다.
+  구분한다. 같은 `stage: 'preview_close'` 이벤트에 `dwellBucket?: '<5s' | '5-15s' | '15-30s' |
+  '30-60s' | '60s+'` 필드도 함께 보낼 수 있다 — 미리보기를 닫기 시작하는 시점(닫기 버튼/Escape)에
+  열람 시작 시각과의 차이를 클라이언트에서 버킷 문자열로만 계산해 전송하므로(원시 밀리초
+  미전송), 재체험 의향 응답 여부와 무관하게 매 미리보기 종료마다 전송된다
+  (`apps/web/src/app.ts`의 `dwellBucket`/`requestClosePreview`).
 - 퍼널 드롭오프 집계는 `GET /api/services/ranking`과 유사하게 기존 `events` 배열을 서비스별로
   재집계하는 읽기 전용 엔드포인트 `GET /api/services/funnel`로 구현했다 — 새 저장소 없이 기존
   인메모리 이벤트 스토어만 재사용한다(§5.2 #5, §6.6).
