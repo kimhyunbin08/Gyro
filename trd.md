@@ -97,12 +97,29 @@ flowchart LR
     건너뛰고 닫기)를 보여준다. 응답 시 `answerRetryIntent()`가 `service_click` 이벤트를
     `metadata: {serviceId, mode:'embed', stage:'preview_close', retryIntent}`로 추가 전송한 뒤
     닫고, 건너뛰기 또는 6초 타임아웃이면 응답 없이 닫힌다.
+13. **테마별 "셔플"(멀티 카탈로그)**(`prd.md` §9-4 승격): `landing` 화면의 "바이브 벤처" 버튼은
+    기존과 동일하게 초기 로드된 `vibe-venture` 셔플 카탈로그(`defaultServices`)로 바로 `profile`
+    화면에 진입한다. 새 "서비스 이용하기" 버튼은 `theme` 화면(SNS/연애/생산성/게임 4개 테마 버튼,
+    `renderThemeChoices()`)을 연다. 테마 버튼 클릭(`selectTheme()`)은 `GET /api/services?shuffle=`
+    로 해당 테마 카탈로그를 새로 가져와 `services`를 교체하고, `currentShuffle` 상태를 갱신한 뒤
+    `profile` 화면으로 진입한다(라운드 배칭/중복 제거/헬스체크 필터링 등 기존 메커니즘 재사용).
+    `renderChoices()`의 관심사 태그 목록은 `SHUFFLE_TAGS[currentShuffle]`로 셔플마다 다른
+    고정 어휘를 사용하며, 유형(audience) 질문은 모든 셔플이 공유한다. `profile_submit` 이벤트에는
+    `metadata.shuffle`이 추가로 포함된다.
 
 ### 5.2 백엔드 API (`apps/api/src/server.ts`)
 1. `GET /health` — 컨테이너 헬스체크용 상태 엔드포인트.
-2. `GET /api/services` — 카탈로그를 공식 링크 기준으로 중복 제거(`dedupeCatalog`)한 뒤, 각 서비스에
+2. `GET /api/services` — 쿼리 파라미터 `shuffle`(`vibe-venture`|`sns`|`dating`|`productivity`|`game`,
+   생략 또는 미인식 값은 `vibe-venture`로 폴백, `apps/api/src/shuffles.ts`의 `resolveShuffleCatalog`)로
+   선택한 셔플의 카탈로그를 공식 링크 기준으로 중복 제거(`dedupeCatalog`)한 뒤, 각 서비스에
    대해 `checkServiceHealth()`로 실시간 접속 가능 여부를 확인하고, 실패한 서비스를 제외한 목록을
-   반환한다.
+   반환한다. 셔플별 카탈로그는 `apps/api/src/catalogs/{sns,dating,productivity,game}.ts`에 정적으로
+   정의되어 있으며, 각 20~30개의 실서비스로 구성된다(§9-4 #5: 합법적으로 수집한 공개 정보, 직접
+   요약한 설명文).
+2-1. `GET /api/services/funnel`·`GET /api/services/ranking`은 `shuffles.ts`의
+   `allShuffleServices()`(모든 셔플 카탈로그를 이어 붙인 배열)를 `dedupeCatalog()`로 중복 제거한
+   `dedupedAllShuffles`를 집계 대상으로 사용한다 — 셔플 간 집계를 분리하지 않는다는 §9-4 #6 설계를
+   그대로 따르며, 두 엔드포인트의 응답 스키마는 변경되지 않는다.
 3. `POST /api/events` — 퍼널 이벤트(`landing_view`, `profile_submit`, `card_like`, `card_dislike`,
    `card_skip`, `card_undo`, `service_click`, `result_view`, `email_submit`, `service_feedback_submit`)를
    Zod로 검증 후 인메모리 배열에 적재(최대 5000건, 초과 시 오래된 항목부터 제거). `service_feedback_submit`은
@@ -203,7 +220,7 @@ type FunnelEntry = {
 | 메서드/경로 | 설명 | 검증 | 응답 |
 | --- | --- | --- | --- |
 | `GET /health` | 컨테이너 헬스체크 | - | `{ status: 'ok', service, timestamp }` |
-| `GET /api/services` | 헬스체크 통과 + 중복 제거된 카탈로그 | - | `{ services: Service[] }` |
+| `GET /api/services` | 헬스체크 통과 + 중복 제거된 카탈로그 | `?shuffle=vibe-venture\|sns\|dating\|productivity\|game`(선택, 기본/미인식 값은 `vibe-venture`) | `{ services: Service[] }` |
 | `GET /api/services/ranking` | 누적 `card_like` 횟수 기준 상위 `RANKING_LIMIT`(20)개 서비스 랭킹 | - | `{ ranking: RankingEntry[] }` |
 | `GET /api/services/funnel` | 서비스별 노출/관심 있음/관심 없음/건너뛰기/미리보기 클릭/이유 태그/재체험 의향/체류시간 버킷 집계 | - | `{ funnel: FunnelEntry[] }` |
 | `POST /api/events` | 퍼널 이벤트 적재 | Zod(`eventSchema`) | `202 { accepted: true }` / `400` |

@@ -47,12 +47,26 @@ let services: Service[] = [], index = 0, batchStart = 0, batchEnd = 0, liked: Se
 // swipe flow after every single dislike.
 let dislikedThisBatch: Service[] = [];
 let audience: Audience | null = null, interests = new Set<string>();
+// 셔플(shuffle): 질문→스와이프→결과 플로우를 공유하는 독립된 카탈로그 묶음.
+// 기존 대구 바이브벤처 프로그램 카탈로그는 'vibe-venture' 셔플로 취급되며
+// 기본값으로 유지된다. prd.md §9-4 참고.
+type ShuffleId = 'vibe-venture'|'sns'|'dating'|'productivity'|'game';
+const SHUFFLE_LABELS: Record<ShuffleId,string> = {'vibe-venture':'바이브 벤처','sns':'SNS','dating':'연애','productivity':'생산성','game':'게임'};
+const SHUFFLE_TAGS: Record<ShuffleId,string[]> = {
+  'vibe-venture':['학습','창작','생활','생산성','협업','AI'],
+  'sns':['소통','커뮤니티','콘텐츠공유','네트워킹'],
+  'dating':['매칭','소개팅','커뮤니티','본인인증'],
+  'productivity':['업무관리','메모·노트','자동화','협업'],
+  'game':['캐주얼','멀티플레이어','전략','커뮤니티'],
+};
+let currentShuffle: ShuffleId = 'vibe-venture';
+let defaultServices: Service[] = [];
 const $ = <T extends HTMLElement>(id:string) => document.getElementById(id) as T;
-const screens = ['landing','profile','cards','results','ranking'];
+const screens = ['landing','theme','profile','cards','results','ranking'];
 function show(id:string){screens.forEach(x => $(x).classList.toggle('hidden', x !== id)); window.scrollTo({top:0,behavior:'smooth'});}
 function track(name:string, metadata:Record<string,unknown>={}){void fetch(`${API}/api/events`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,sessionId,metadata})}).catch(()=>{});}
 function startBatch(){ batchStart = index; batchEnd = Math.min(index + BATCH_SIZE, services.length); dislikedThisBatch = []; }
-function renderChoices(){const audiences:[Audience,string][]=[['student','학생이에요'],['teacher','선생님이에요'],['parent','학부모예요'],['other','그 외예요']];$('audience-choices').innerHTML=audiences.map(([id,label])=>`<button class="choice ${audience===id?'selected':''}" data-audience="${id}">${label}</button>`).join(''); document.querySelectorAll<HTMLElement>('[data-audience]').forEach(b=>b.onclick=()=>{audience=b.dataset.audience as Audience;renderChoices();checkProfile();}); const tags=['학습','창작','생활','생산성','협업','AI'];$('interest-choices').innerHTML=tags.map(tag=>`<button class="tag ${interests.has(tag)?'selected':''}" data-interest="${tag}">${tag}</button>`).join('');document.querySelectorAll<HTMLElement>('[data-interest]').forEach(b=>b.onclick=()=>{const tag=b.dataset.interest!;interests.has(tag)?interests.delete(tag):interests.add(tag);renderChoices();checkProfile();});}
+function renderChoices(){const audiences:[Audience,string][]=[['student','학생이에요'],['teacher','선생님이에요'],['parent','학부모예요'],['other','그 외예요']];$('audience-choices').innerHTML=audiences.map(([id,label])=>`<button class="choice ${audience===id?'selected':''}" data-audience="${id}">${label}</button>`).join(''); document.querySelectorAll<HTMLElement>('[data-audience]').forEach(b=>b.onclick=()=>{audience=b.dataset.audience as Audience;renderChoices();checkProfile();}); const tags=SHUFFLE_TAGS[currentShuffle];$('interest-choices').innerHTML=tags.map(tag=>`<button class="tag ${interests.has(tag)?'selected':''}" data-interest="${tag}">${tag}</button>`).join('');document.querySelectorAll<HTMLElement>('[data-interest]').forEach(b=>b.onclick=()=>{const tag=b.dataset.interest!;interests.has(tag)?interests.delete(tag):interests.add(tag);renderChoices();checkProfile();});}
 function checkProfile(){ $('profile-next').toggleAttribute('disabled', !audience || interests.size===0); }
 // Swipe tuning: drag distance past the threshold (or a fast flick) commits
 // the decision; released early, the card springs back to center.
@@ -358,12 +372,16 @@ const startButtonDefaultText = startButton.textContent ?? '';
 // prd.md §9 item 6: an empty catalog (all exhibits currently unreachable) must show a
 // "preparing/try again" state instead of silently letting the user swipe
 // through zero cards into a misleading "all done" results screen.
+async function fetchShuffleServices(shuffle: ShuffleId): Promise<Service[]> {
+  const response = await fetch(`${API}/api/services?shuffle=${encodeURIComponent(shuffle)}`);
+  if (!response.ok) throw new Error('services');
+  const payload = await response.json();
+  return payload.services;
+}
 async function load(){
   try{
-    const response=await fetch(`${API}/api/services`);
-    if(!response.ok)throw new Error('services');
-    const payload=await response.json();
-    services=payload.services;
+    defaultServices = await fetchShuffleServices('vibe-venture');
+    services = defaultServices;
     if(services.length===0){
       startButton.disabled=false;
       startButton.textContent='서비스를 준비 중이에요. 잠시 후 다시 시도해주세요';
@@ -382,8 +400,36 @@ async function load(){
 // resolves would leave `services` empty and strand the cards screen at
 // 0/0. Disable the button until the catalog is ready (or failed) instead.
 startButton.disabled=true;startButton.textContent='불러오는 중...';
-$('start-button').onclick=()=>{if(services.length===0)return;show('profile');renderChoices();};
-$('profile-next').onclick=()=>{services=[...services].sort((a,b)=>matchScore(b,audience,interests)-matchScore(a,audience,interests));track('profile_submit',{audience,interests:[...interests]});startBatch();show('cards');renderCard();};
+$('start-button').onclick=()=>{if(defaultServices.length===0)return;currentShuffle='vibe-venture';services=defaultServices;audience=null;interests=new Set();show('profile');renderChoices();checkProfile();};
+const themeEntryButton = $<HTMLButtonElement>('theme-entry-button');
+const THEME_IDS: Exclude<ShuffleId,'vibe-venture'>[] = ['sns','dating','productivity','game'];
+function renderThemeChoices(){
+  $('theme-choices').innerHTML = THEME_IDS.map(id => `<button class="choice" data-theme="${id}">${SHUFFLE_LABELS[id]}</button>`).join('');
+  document.querySelectorAll<HTMLButtonElement>('[data-theme]').forEach(b => b.onclick = () => selectTheme(b.dataset.theme as ShuffleId, b));
+}
+async function selectTheme(shuffle: ShuffleId, button: HTMLButtonElement){
+  const original = button.textContent;
+  button.disabled = true; button.textContent = '불러오는 중...';
+  try{
+    const fetched = await fetchShuffleServices(shuffle);
+    if(fetched.length===0){
+      button.textContent = '서비스를 준비 중이에요';
+      setTimeout(()=>{button.disabled=false;button.textContent=original;}, 1500);
+      return;
+    }
+    currentShuffle = shuffle;
+    services = fetched;
+    audience = null; interests = new Set();
+    track('landing_view', { shuffle });
+    show('profile'); renderChoices(); checkProfile();
+  }catch{
+    button.textContent = '불러오지 못했어요';
+    setTimeout(()=>{button.disabled=false;button.textContent=original;}, 1500);
+  }
+}
+themeEntryButton.onclick = () => { renderThemeChoices(); show('theme'); };
+$('theme-back').onclick = () => show('landing');
+$('profile-next').onclick=()=>{services=[...services].sort((a,b)=>matchScore(b,audience,interests)-matchScore(a,audience,interests));track('profile_submit',{audience,interests:[...interests],shuffle:currentShuffle});startBatch();show('cards');renderCard();};
 function triggerDecision(action:'like'|'dislike'){ if(index>=batchEnd)return; const card=$('swipe-stage').querySelector<HTMLElement>('.service-card'); if(card) flyOutCard(card, action, () => decide(action)); else decide(action); }
 $('like-button').onclick=()=>triggerDecision('like');$('reject-button').onclick=()=>triggerDecision('dislike');$('undo-button').onclick=undo;$('swipe-stage').onkeydown=e=>{if(e.key==='ArrowRight')triggerDecision('like');if(e.key==='ArrowLeft')triggerDecision('dislike');if(e.key.toLowerCase()==='u')undo();};
 $('continue-button').onclick=()=>{startBatch();show('cards');renderCard();};
