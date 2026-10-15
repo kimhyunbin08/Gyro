@@ -428,12 +428,22 @@ async function selectTheme(shuffle: ShuffleId, button: HTMLButtonElement){
   }
 }
 themeEntryButton.onclick = () => { renderThemeChoices(); show('theme'); };
-$('theme-back').onclick = () => show('landing');
+// Shared "go back to the very start" action: the logo and home button on
+// every non-landing screen, plus the results screen's "처음부터 다시 보기"
+// button, all reset in-progress round state and return to landing. This is
+// always a manual, user-triggered navigation (never automatic).
+function goHome(){index=0;batchStart=0;batchEnd=0;liked=[];dislikedThisBatch=[];history=[];audience=null;interests.clear();show('landing');}
+$('theme-back').onclick = goHome;
+document.querySelectorAll<HTMLElement>('.home-logo').forEach(el=>{
+  el.addEventListener('click', goHome);
+  el.addEventListener('keydown', e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();goHome();}});
+});
+document.querySelectorAll<HTMLButtonElement>('.home-button').forEach(el=>el.onclick=goHome);
 $('profile-next').onclick=()=>{services=[...services].sort((a,b)=>matchScore(b,audience,interests)-matchScore(a,audience,interests));track('profile_submit',{audience,interests:[...interests],shuffle:currentShuffle});startBatch();show('cards');renderCard();};
 function triggerDecision(action:'like'|'dislike'){ if(index>=batchEnd)return; const card=$('swipe-stage').querySelector<HTMLElement>('.service-card'); if(card) flyOutCard(card, action, () => decide(action)); else decide(action); }
 $('like-button').onclick=()=>triggerDecision('like');$('reject-button').onclick=()=>triggerDecision('dislike');$('undo-button').onclick=undo;$('swipe-stage').onkeydown=e=>{if(e.key==='ArrowRight')triggerDecision('like');if(e.key==='ArrowLeft')triggerDecision('dislike');if(e.key.toLowerCase()==='u')undo();};
 $('continue-button').onclick=()=>{startBatch();show('cards');renderCard();};
-$('restart-button').onclick=()=>{index=0;batchStart=0;batchEnd=0;liked=[];dislikedThisBatch=[];history=[];audience=null;interests.clear();show('landing');};
+$('restart-button').onclick=goHome;
 $('email-form').onsubmit=async e=>{e.preventDefault();const message=$('email-message');try{const r=await fetch(`${API}/api/email-leads`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$<HTMLInputElement>('email').value,updatesOptIn:$<HTMLInputElement>('updates').checked})});const body=await r.json();if(!r.ok)throw new Error(body.message);message.textContent='결과를 저장했어요.';track('email_submit',{updatesOptIn:$<HTMLInputElement>('updates').checked});}catch(error){message.textContent=error instanceof Error?error.message:'저장에 실패했어요.';}};
 $('preview-close').onclick=requestClosePreview;
 document.addEventListener('keydown',e=>{if(e.key==='Escape')requestClosePreview();});

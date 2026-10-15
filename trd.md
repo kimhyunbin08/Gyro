@@ -106,6 +106,13 @@ flowchart LR
     `renderChoices()`의 관심사 태그 목록은 `SHUFFLE_TAGS[currentShuffle]`로 셔플마다 다른
     고정 어휘를 사용하며, 유형(audience) 질문은 모든 셔플이 공유한다. `profile_submit` 이벤트에는
     `metadata.shuffle`이 추가로 포함된다.
+14. **홈으로 돌아가기 내비게이션**: `landing`을 제외한 모든 화면(`theme`/`profile`/`cards`/
+    `results`/`ranking`)의 상단 바(`.topbar`)는 로고(`.wordmark`, `role="button"`)와 별도의
+    홈 아이콘 버튼(`.home-button`, "🏠")을 함께 제공한다. 둘 다 공용 `goHome()`을 호출해 진행 중인
+    라운드 상태(`index`/`batchStart`/`batchEnd`/`liked`/`dislikedThisBatch`/`history`/`audience`/
+    `interests`)를 초기화하고 `landing` 화면으로 돌아간다(기존 결과 화면의 "처음부터 다시 보기"
+    버튼과 동일한 동작이며, 그 버튼도 이제 `goHome()`을 재사용한다). 자동 전환이 아니라 사용자가
+    명시적으로 클릭했을 때만 동작하며, 어떤 화면/라운드 진행 단계에서도 접근 가능하다.
 
 ### 5.2 백엔드 API (`apps/api/src/server.ts`)
 1. `GET /health` — 컨테이너 헬스체크용 상태 엔드포인트.
