@@ -1,0 +1,586 @@
+import type { CatalogService } from '../catalog.js';
+
+export const productivityCatalog: CatalogService[] = [
+  {
+    "id": "productivity-1",
+    "name": "Notion",
+    "tagline": "메모와 문서, 업무관리를 하나로 합친 올인원 작업공간",
+    "description": "페이지 단위로 메모, 문서, 데이터베이스를 자유롭게 조합해 개인 노트부터 팀 위키까지 운영할 수 있는 도구다. 블록 편집 방식이라 글, 표, 체크리스트를 한 화면에서 섞어 쓸 수 있다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.notion.so?w=1200",
+    "serviceUrl": "https://www.notion.so",
+    "tags": [
+      "메모·노트",
+      "업무관리",
+      "협업"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "1"
+  },
+  {
+    "id": "productivity-2",
+    "name": "Slack",
+    "tagline": "채널 기반으로 대화와 파일을 정리하는 팀 메신저",
+    "description": "주제별 채널과 다이렉트 메시지로 사내 소통을 구조화하고, 여러 업무 도구를 연결해 알림과 파일을 한 곳에서 확인할 수 있다. 음성·화상 통화 기능도 지원한다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fslack.com?w=1200",
+    "serviceUrl": "https://slack.com",
+    "tags": [
+      "협업",
+      "업무관리"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "2"
+  },
+  {
+    "id": "productivity-3",
+    "name": "Trello",
+    "tagline": "칸반 보드로 할 일의 진행 상태를 한눈에 보는 도구",
+    "description": "카드를 리스트 사이로 옮기며 작업 단계를 시각적으로 관리하는 보드형 서비스다. 체크리스트, 마감일, 담당자 지정 기능으로 개인 및 소규모 팀 업무를 추적하기 좋다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Ftrello.com?w=1200",
+    "serviceUrl": "https://trello.com",
+    "tags": [
+      "업무관리",
+      "협업"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "3"
+  },
+  {
+    "id": "productivity-4",
+    "name": "Asana",
+    "tagline": "프로젝트 일정과 담당자를 체계적으로 관리하는 업무관리 플랫폼",
+    "description": "작업을 목록, 보드, 타임라인 등 다양한 뷰로 전환해 보며 팀 프로젝트 진행 상황을 추적한다. 작업 간 의존 관계와 마감일 설정으로 일정 관리가 수월하다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fasana.com?w=1200",
+    "serviceUrl": "https://asana.com",
+    "tags": [
+      "업무관리",
+      "협업"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "4"
+  },
+  {
+    "id": "productivity-5",
+    "name": "Todoist",
+    "tagline": "개인 할 일과 일정을 간결하게 정리하는 투두리스트 앱",
+    "description": "자연어로 할 일을 입력하면 날짜와 반복 주기를 자동 인식해 일정을 등록해 준다. 우선순위와 프로젝트별 분류로 개인 업무를 가볍게 관리할 수 있다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Ftodoist.com?w=1200",
+    "serviceUrl": "https://todoist.com",
+    "tags": [
+      "업무관리"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "5"
+  },
+  {
+    "id": "productivity-6",
+    "name": "ClickUp",
+    "tagline": "작업, 문서, 목표관리를 통합한 올인원 업무관리 플랫폼",
+    "description": "태스크 관리, 문서 작성, 목표 추적, 화이트보드 기능을 한 서비스 안에 모아 여러 업무 도구를 대체하려는 플랫폼이다. 커스터마이징 가능한 뷰와 자동화 규칙을 제공한다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fclickup.com?w=1200",
+    "serviceUrl": "https://clickup.com",
+    "tags": [
+      "업무관리",
+      "협업",
+      "자동화"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "6"
+  },
+  {
+    "id": "productivity-7",
+    "name": "Linear",
+    "tagline": "개발팀을 위한 빠르고 정돈된 이슈 트래킹 도구",
+    "description": "버그와 기능 요청을 이슈로 등록하고 진행 상태, 우선순위, 사이클을 관리하는 소프트웨어 개발 전용 도구다. 단축키 중심의 빠른 조작감이 특징이다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Flinear.app?w=1200",
+    "serviceUrl": "https://linear.app",
+    "tags": [
+      "업무관리",
+      "협업"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "7"
+  },
+  {
+    "id": "productivity-8",
+    "name": "Monday.com",
+    "tagline": "표 형태로 업무 데이터를 관리하는 워크 운영체제",
+    "description": "프로젝트, 일정, 고객 관리 등 다양한 업무를 커스텀 가능한 표와 보드로 구성해 관리하는 플랫폼이다. 자동화 규칙을 추가해 반복 작업을 줄일 수 있다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fmonday.com?w=1200",
+    "serviceUrl": "https://monday.com",
+    "tags": [
+      "업무관리",
+      "자동화",
+      "협업"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "8"
+  },
+  {
+    "id": "productivity-9",
+    "name": "Evernote",
+    "tagline": "텍스트, 사진, 웹클리핑을 모아두는 디지털 노트 서비스",
+    "description": "여러 기기에서 작성한 메모와 스캔한 문서, 웹페이지 클리핑을 한 곳에 저장하고 검색할 수 있는 노트 앱이다. 노트북과 태그로 자료를 분류해 정리한다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fevernote.com?w=1200",
+    "serviceUrl": "https://evernote.com",
+    "tags": [
+      "메모·노트"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "9"
+  },
+  {
+    "id": "productivity-10",
+    "name": "Obsidian",
+    "tagline": "메모 간 링크로 지식을 연결하는 네트워크형 노트 앱",
+    "description": "마크다운 파일 기반으로 메모를 작성하고, 메모끼리 링크를 걸어 그래프 형태로 생각을 연결해 보여주는 개인 지식관리 도구다. 로컬 파일 저장과 플러그인 확장을 지원한다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fobsidian.md?w=1200",
+    "serviceUrl": "https://obsidian.md",
+    "tags": [
+      "메모·노트"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "10"
+  },
+  {
+    "id": "productivity-11",
+    "name": "Google Workspace",
+    "tagline": "문서, 스프레드시트, 메일, 드라이브를 아우르는 업무용 서비스 묶음",
+    "description": "구글 문서, 시트, 프레젠테이션, 드라이브, 메일 등을 하나의 계정으로 연동해 문서 작성과 실시간 공동 편집을 지원하는 업무용 클라우드 도구 모음이다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fworkspace.google.com?w=1200",
+    "serviceUrl": "https://workspace.google.com",
+    "tags": [
+      "협업",
+      "메모·노트"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "11"
+  },
+  {
+    "id": "productivity-12",
+    "name": "Zapier",
+    "tagline": "앱과 앱 사이의 반복 작업을 자동으로 연결하는 서비스",
+    "description": "트리거와 액션을 설정해 서로 다른 웹 서비스 간 데이터 전달과 반복 업무를 코드 없이 자동화한다. 수천 개의 앱 연동을 지원해 업무 흐름을 간소화한다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fzapier.com?w=1200",
+    "serviceUrl": "https://zapier.com",
+    "tags": [
+      "자동화"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "12"
+  },
+  {
+    "id": "productivity-13",
+    "name": "Figma",
+    "tagline": "실시간 공동 작업이 가능한 브라우저 기반 디자인 협업 도구",
+    "description": "여러 사람이 동시에 하나의 디자인 파일을 편집하고 댓글로 피드백을 주고받을 수 있는 디자인 협업 플랫폼이다. 화이트보드 기능인 피그잼도 함께 제공한다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.figma.com?w=1200",
+    "serviceUrl": "https://www.figma.com",
+    "tags": [
+      "협업"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "13"
+  },
+  {
+    "id": "productivity-14",
+    "name": "Confluence",
+    "tagline": "팀의 문서와 지식을 체계적으로 쌓아가는 위키형 협업 공간",
+    "description": "회의록, 기획서, 매뉴얼 등을 페이지로 작성하고 공간별로 정리해 팀 지식베이스를 구축하는 문서 협업 도구다. 지라와 연동해 프로젝트 문서로도 활용된다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.atlassian.com%2Fsoftware%2Fconfluence?w=1200",
+    "serviceUrl": "https://www.atlassian.com/software/confluence",
+    "tags": [
+      "메모·노트",
+      "협업"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "14"
+  },
+  {
+    "id": "productivity-15",
+    "name": "Jira",
+    "tagline": "개발 프로젝트의 이슈와 스프린트를 관리하는 업무 트래커",
+    "description": "버그, 작업, 스토리를 이슈로 등록하고 보드와 스프린트 단위로 진행 상황을 추적하는 프로젝트 관리 도구다. 애자일 개발 프로세스에 맞춘 기능이 강점이다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.atlassian.com%2Fsoftware%2Fjira?w=1200",
+    "serviceUrl": "https://www.atlassian.com/software/jira",
+    "tags": [
+      "업무관리"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "15"
+  },
+  {
+    "id": "productivity-16",
+    "name": "Flow",
+    "tagline": "국내 기업 맞춤형 업무용 협업 메신저 및 태스크 관리 도구",
+    "description": "메신저, 전자결재, 할 일 관리 기능을 한 서비스에 담아 국내 조직의 업무 방식에 맞춰 만든 협업 플랫폼이다. 메신저 대화에서 바로 업무를 지시하고 추적할 수 있다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fflow.team?w=1200",
+    "serviceUrl": "https://flow.team",
+    "tags": [
+      "협업",
+      "업무관리"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "16"
+  },
+  {
+    "id": "productivity-17",
+    "name": "Dooray!",
+    "tagline": "메신저, 메일, 프로젝트관리를 묶은 국내 업무용 협업 플랫폼",
+    "description": "메신저, 이메일, 캘린더, 프로젝트 보드를 하나의 서비스로 제공해 조직 내 여러 업무 도구를 대체하려는 국산 협업 솔루션이다. 중소기업과 공공기관에서 많이 쓰인다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.dooray.com?w=1200",
+    "serviceUrl": "https://www.dooray.com",
+    "tags": [
+      "협업",
+      "업무관리"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "17"
+  },
+  {
+    "id": "productivity-18",
+    "name": "Swit",
+    "tagline": "채팅과 업무관리를 한 화면에서 처리하는 협업 플랫폼",
+    "description": "메신저 창 옆에 작업 보드를 나란히 배치해 대화와 할 일 처리를 분리하지 않고 진행할 수 있도록 만든 국내 개발 협업 도구다. 외부 서비스 연동 기능도 지원한다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.swit.io?w=1200",
+    "serviceUrl": "https://www.swit.io",
+    "tags": [
+      "협업",
+      "업무관리"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "18"
+  },
+  {
+    "id": "productivity-19",
+    "name": "JANDI",
+    "tagline": "국내 중소기업에서 많이 쓰는 토픽 기반 협업 메신저",
+    "description": "주제별 토픽방으로 대화를 나누고 파일, 할 일 카드를 공유할 수 있는 국산 업무용 메신저다. 간단한 인터페이스로 소규모 조직의 사내 소통 도구로 자리잡았다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.jandi.com?w=1200",
+    "serviceUrl": "https://www.jandi.com",
+    "tags": [
+      "협업"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "19"
+  },
+  {
+    "id": "productivity-20",
+    "name": "LINE WORKS",
+    "tagline": "메신저와 그룹웨어 기능을 함께 담은 업무용 메신저",
+    "description": "채팅, 메일, 캘린더, 주소록 등 사내 그룹웨어 기능을 메신저 형태로 묶은 업무용 플랫폼이다. 라인 메신저와 유사한 사용성으로 접근성이 높다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.worksmobile.com?w=1200",
+    "serviceUrl": "https://www.worksmobile.com",
+    "tags": [
+      "협업",
+      "업무관리"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "20"
+  },
+  {
+    "id": "productivity-21",
+    "name": "Coda",
+    "tagline": "문서 안에 표와 자동화 버튼을 넣을 수 있는 올인원 문서 도구",
+    "description": "일반 문서처럼 글을 쓰다가 표, 버튼, 자동화 수식을 자유롭게 삽입해 보고서이자 업무 도구로 쓸 수 있는 서비스다. 팀 운영 문서를 앱처럼 만들 수 있다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fcoda.io?w=1200",
+    "serviceUrl": "https://coda.io",
+    "tags": [
+      "메모·노트",
+      "자동화",
+      "업무관리"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "21"
+  },
+  {
+    "id": "productivity-22",
+    "name": "Airtable",
+    "tagline": "스프레드시트처럼 쓰는 관계형 데이터베이스 협업 도구",
+    "description": "표 형태로 데이터를 입력하면서도 데이터베이스처럼 항목 간 관계를 연결하고 다양한 뷰로 조회할 수 있는 서비스다. 자동화 기능으로 반복 입력 작업도 줄일 수 있다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fairtable.com?w=1200",
+    "serviceUrl": "https://airtable.com",
+    "tags": [
+      "업무관리",
+      "자동화",
+      "협업"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "22"
+  },
+  {
+    "id": "productivity-23",
+    "name": "Miro",
+    "tagline": "무한 캔버스 위에서 아이디어를 함께 그리는 온라인 화이트보드",
+    "description": "포스트잇, 도형, 다이어그램을 자유롭게 배치해 브레인스토밍이나 기획 회의를 진행하는 협업용 화이트보드 서비스다. 여러 사람이 동시에 캔버스를 편집할 수 있다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fmiro.com?w=1200",
+    "serviceUrl": "https://miro.com",
+    "tags": [
+      "협업"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "23"
+  },
+  {
+    "id": "productivity-24",
+    "name": "Basecamp",
+    "tagline": "메시지, 할 일, 일정을 프로젝트 단위로 모아 관리하는 도구",
+    "description": "프로젝트마다 메시지보드, 할 일 목록, 일정, 파일함을 세트로 제공해 흩어지기 쉬운 업무 소통을 한 곳에 모으는 관리 플랫폼이다. 단순한 구성으로 알림 피로를 줄인다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fbasecamp.com?w=1200",
+    "serviceUrl": "https://basecamp.com",
+    "tags": [
+      "업무관리",
+      "협업"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "24"
+  },
+  {
+    "id": "productivity-25",
+    "name": "Make",
+    "tagline": "시각적으로 흐름을 그려 여러 앱을 자동 연동하는 도구",
+    "description": "노드와 화살표로 데이터 흐름을 그림처럼 설계해 여러 웹 서비스 사이의 작업을 자동화하는 플랫폼이다. 복잡한 조건 분기도 코드 없이 구성할 수 있다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.make.com?w=1200",
+    "serviceUrl": "https://www.make.com",
+    "tags": [
+      "자동화"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "25"
+  },
+  {
+    "id": "productivity-26",
+    "name": "Toggl Track",
+    "tagline": "버튼 하나로 업무 시간을 기록하는 타임트래킹 서비스",
+    "description": "작업을 시작할 때 타이머를 누르고 끝나면 멈추는 방식으로 개인과 팀의 업무 소요 시간을 기록, 분석하는 도구다. 프로젝트별 리포트로 시간 사용 패턴을 확인할 수 있다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Ftoggl.com%2Ftrack%2F?w=1200",
+    "serviceUrl": "https://toggl.com/track/",
+    "tags": [
+      "업무관리"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "26"
+  },
+  {
+    "id": "productivity-27",
+    "name": "Collabee",
+    "tagline": "프로젝트와 업무 메모를 함께 관리하는 국내 협업 서비스",
+    "description": "업무 공간마다 일정, 할 일, 메모를 묶어 정리할 수 있는 국산 협업 플랫폼이다. 외부 파트너와의 공동 작업 공간을 따로 만들 수 있는 점이 특징이다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fcollabee.co?w=1200",
+    "serviceUrl": "https://collabee.co",
+    "tags": [
+      "협업",
+      "업무관리"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "27"
+  },
+  {
+    "id": "productivity-28",
+    "name": "TickTick",
+    "tagline": "할 일과 캘린더, 습관 기록을 함께 관리하는 개인 생산성 앱",
+    "description": "할 일 목록에 마감일과 알림을 설정하고 캘린더 뷰로 전환해 일정을 확인할 수 있는 앱이다. 반복 습관 체크 기능도 포함되어 있어 개인 루틴 관리에 쓰인다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fticktick.com?w=1200",
+    "serviceUrl": "https://ticktick.com",
+    "tags": [
+      "업무관리"
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other"
+    ],
+    "room": "생산성",
+    "roomKey": "productivity",
+    "number": "28"
+  }
+];

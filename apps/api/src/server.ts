@@ -2,6 +2,7 @@ import express, { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { catalog as liveCatalog } from './catalog.js';
 import { checkServiceHealth } from './services/health-check.service.js';
+import { allShuffleServices, resolveShuffleCatalog } from './shuffles.js';
 
 type Audience = 'student' | 'teacher' | 'parent' | 'other';
 type EventName =
@@ -89,7 +90,9 @@ function dedupeCatalog(services: typeof liveCatalog): typeof liveCatalog {
   });
 }
 
-const dedupedCatalog = dedupeCatalog(liveCatalog);
+// prd.md §9-4 / ideation.md §11: 랭킹·퍼널 집계는 셔플을 구분하지 않고 전체 서비스(바이브 벤처
+// + 테마 셔플들)를 대상으로 한다. 셔플 간 URL 중복도 동일한 dedupe 규칙으로 걸러낸다.
+const dedupedAllShuffles = dedupeCatalog(allShuffleServices());
 
 function allowedOrigin(): string {
   return process.env.WEB_ORIGIN || '*';
@@ -112,9 +115,10 @@ export function createApp() {
     res.json({ status: 'ok', service: 'gyro-api', timestamp: new Date().toISOString() });
   });
 
-  app.get('/api/services', async (_req, res) => {
+  app.get('/api/services', async (req, res) => {
+    const source = dedupeCatalog(resolveShuffleCatalog(req.query.shuffle));
     const checked = await Promise.all(
-      dedupedCatalog.map(async (service) => ({ service, health: await checkServiceHealth(service.serviceUrl) }))
+      source.map(async (service) => ({ service, health: await checkServiceHealth(service.serviceUrl) }))
     );
     // prd.md §9 item 5: only services that pass a recent health check reach the swipe deck.
     const services = checked.filter((c) => c.health.status === 'healthy').map((c) => ({ ...c.service, health: c.health }));
@@ -170,7 +174,7 @@ export function createApp() {
         }
       }
     }
-    const funnel = dedupedCatalog
+    const funnel = dedupedAllShuffles
       .map((service) => {
         const s = stats.get(service.id);
         const impressions = (s?.likes || 0) + (s?.dislikes || 0) + (s?.skips || 0);
@@ -204,7 +208,7 @@ export function createApp() {
       if (typeof serviceId !== 'string') continue;
       likeCounts.set(serviceId, (likeCounts.get(serviceId) || 0) + 1);
     }
-    const ranking = dedupedCatalog
+    const ranking = dedupedAllShuffles
       .map((service) => ({ id: service.id, name: service.name, tagline: service.tagline, serviceUrl: service.serviceUrl, likeCount: likeCounts.get(service.id) || 0 }))
       .filter((entry) => entry.likeCount > 0)
       .sort((a, b) => b.likeCount - a.likeCount)

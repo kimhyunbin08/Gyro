@@ -61,7 +61,7 @@ describe('web unit: catalog load race guard', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(startButton.disabled).toBe(false);
-    expect(startButton.textContent).toContain('발견 시작하기');
+    expect(startButton.textContent).toContain('바이브 벤처');
   });
 
   it('keeps the start button enabled-but-inert if the catalog fetch fails, instead of stalling cards at 0 / 0', async () => {
