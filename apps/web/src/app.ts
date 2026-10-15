@@ -51,6 +51,10 @@ let audience: Audience | null = null, interests = new Set<string>();
 // 기존 대구 바이브벤처 프로그램 카탈로그는 'vibe-venture' 셔플로 취급되며
 // 기본값으로 유지된다. prd.md §9-4 참고.
 type ShuffleId = 'vibe-venture'|'sns'|'dating'|'productivity'|'game';
+// prd.md §9-4 #7: theme shuffles are split into mainstream ("주류") vs.
+// emerging ("비주류") services. Omitting `tier` entirely (the "둘 다" choice)
+// means "show both" — there is no third server-side value for it.
+type ServiceTier = 'mainstream'|'emerging';
 const SHUFFLE_LABELS: Record<ShuffleId,string> = {'vibe-venture':'바이브 벤처','sns':'SNS','dating':'연애','productivity':'생산성','game':'게임'};
 const SHUFFLE_TAGS: Record<ShuffleId,string[]> = {
   'vibe-venture':['학습','창작','생활','생산성','협업','AI'],
@@ -62,7 +66,7 @@ const SHUFFLE_TAGS: Record<ShuffleId,string[]> = {
 let currentShuffle: ShuffleId = 'vibe-venture';
 let defaultServices: Service[] = [];
 const $ = <T extends HTMLElement>(id:string) => document.getElementById(id) as T;
-const screens = ['landing','theme','profile','cards','results','ranking'];
+const screens = ['landing','theme','tier','profile','cards','results','ranking'];
 function show(id:string){screens.forEach(x => $(x).classList.toggle('hidden', x !== id)); window.scrollTo({top:0,behavior:'smooth'});}
 function track(name:string, metadata:Record<string,unknown>={}){void fetch(`${API}/api/events`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,sessionId,metadata})}).catch(()=>{});}
 function startBatch(){ batchStart = index; batchEnd = Math.min(index + BATCH_SIZE, services.length); dislikedThisBatch = []; }
@@ -372,8 +376,10 @@ const startButtonDefaultText = startButton.textContent ?? '';
 // prd.md §9 item 6: an empty catalog (all exhibits currently unreachable) must show a
 // "preparing/try again" state instead of silently letting the user swipe
 // through zero cards into a misleading "all done" results screen.
-async function fetchShuffleServices(shuffle: ShuffleId): Promise<Service[]> {
-  const response = await fetch(`${API}/api/services?shuffle=${encodeURIComponent(shuffle)}`);
+async function fetchShuffleServices(shuffle: ShuffleId, tier?: ServiceTier): Promise<Service[]> {
+  const params = new URLSearchParams({ shuffle });
+  if (tier) params.set('tier', tier);
+  const response = await fetch(`${API}/api/services?${params.toString()}`);
   if (!response.ok) throw new Error('services');
   const payload = await response.json();
   return payload.services;
@@ -403,15 +409,36 @@ startButton.disabled=true;startButton.textContent='불러오는 중...';
 $('start-button').onclick=()=>{if(defaultServices.length===0)return;currentShuffle='vibe-venture';services=defaultServices;audience=null;interests=new Set();show('profile');renderChoices();checkProfile();};
 const themeEntryButton = $<HTMLButtonElement>('theme-entry-button');
 const THEME_IDS: Exclude<ShuffleId,'vibe-venture'>[] = ['sns','dating','productivity','game'];
+let pendingThemeShuffle: Exclude<ShuffleId,'vibe-venture'> | null = null;
 function renderThemeChoices(){
   $('theme-choices').innerHTML = THEME_IDS.map(id => `<button class="choice" data-theme="${id}">${SHUFFLE_LABELS[id]}</button>`).join('');
-  document.querySelectorAll<HTMLButtonElement>('[data-theme]').forEach(b => b.onclick = () => selectTheme(b.dataset.theme as ShuffleId, b));
+  document.querySelectorAll<HTMLButtonElement>('[data-theme]').forEach(b => b.onclick = () => selectTheme(b.dataset.theme as Exclude<ShuffleId,'vibe-venture'>));
 }
-async function selectTheme(shuffle: ShuffleId, button: HTMLButtonElement){
+// Theme selection only records the pending shuffle and moves to the
+// 주류/비주류 choice; the actual catalog fetch (and its "준비 중" / "불러오지
+// 못했어요" error handling) now happens in selectTier() once a tier is
+// known, since the services returned depend on both shuffle and tier.
+function selectTheme(shuffle: Exclude<ShuffleId,'vibe-venture'>){
+  pendingThemeShuffle = shuffle;
+  renderTierChoices();
+  show('tier');
+}
+const TIER_CHOICES: { tier?: ServiceTier; label: string }[] = [
+  { tier: 'mainstream', label: '주류 서비스' },
+  { tier: 'emerging', label: '비주류(신생) 서비스' },
+  { label: '둘 다 (추천)' },
+];
+function renderTierChoices(){
+  $('tier-choices').innerHTML = TIER_CHOICES.map((t,i) => `<button class="choice${t.tier===undefined?' recommended':''}" data-tier-index="${i}">${t.label}</button>`).join('');
+  document.querySelectorAll<HTMLButtonElement>('[data-tier-index]').forEach(b => b.onclick = () => selectTier(TIER_CHOICES[Number(b.dataset.tierIndex)].tier, b));
+}
+async function selectTier(tier: ServiceTier | undefined, button: HTMLButtonElement){
+  if(!pendingThemeShuffle) return;
+  const shuffle = pendingThemeShuffle;
   const original = button.textContent;
   button.disabled = true; button.textContent = '불러오는 중...';
   try{
-    const fetched = await fetchShuffleServices(shuffle);
+    const fetched = await fetchShuffleServices(shuffle, tier);
     if(fetched.length===0){
       button.textContent = '서비스를 준비 중이에요';
       setTimeout(()=>{button.disabled=false;button.textContent=original;}, 1500);
@@ -420,7 +447,7 @@ async function selectTheme(shuffle: ShuffleId, button: HTMLButtonElement){
     currentShuffle = shuffle;
     services = fetched;
     audience = null; interests = new Set();
-    track('landing_view', { shuffle });
+    track('landing_view', { shuffle, tier: tier ?? 'all' });
     show('profile'); renderChoices(); checkProfile();
   }catch{
     button.textContent = '불러오지 못했어요';
@@ -432,8 +459,9 @@ themeEntryButton.onclick = () => { renderThemeChoices(); show('theme'); };
 // every non-landing screen, plus the results screen's "처음부터 다시 보기"
 // button, all reset in-progress round state and return to landing. This is
 // always a manual, user-triggered navigation (never automatic).
-function goHome(){index=0;batchStart=0;batchEnd=0;liked=[];dislikedThisBatch=[];history=[];audience=null;interests.clear();show('landing');}
+function goHome(){index=0;batchStart=0;batchEnd=0;liked=[];dislikedThisBatch=[];history=[];audience=null;interests.clear();pendingThemeShuffle=null;show('landing');}
 $('theme-back').onclick = goHome;
+$('tier-back').onclick = () => { renderThemeChoices(); show('theme'); };
 document.querySelectorAll<HTMLElement>('.home-logo').forEach(el=>{
   el.addEventListener('click', goHome);
   el.addEventListener('keydown', e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();goHome();}});

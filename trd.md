@@ -100,29 +100,45 @@ flowchart LR
 13. **테마별 "셔플"(멀티 카탈로그)**(`prd.md` §9-4 승격): `landing` 화면의 "바이브 벤처" 버튼은
     기존과 동일하게 초기 로드된 `vibe-venture` 셔플 카탈로그(`defaultServices`)로 바로 `profile`
     화면에 진입한다. 새 "서비스 이용하기" 버튼은 `theme` 화면(SNS/연애/생산성/게임 4개 테마 버튼,
-    `renderThemeChoices()`)을 연다. 테마 버튼 클릭(`selectTheme()`)은 `GET /api/services?shuffle=`
-    로 해당 테마 카탈로그를 새로 가져와 `services`를 교체하고, `currentShuffle` 상태를 갱신한 뒤
-    `profile` 화면으로 진입한다(라운드 배칭/중복 제거/헬스체크 필터링 등 기존 메커니즘 재사용).
-    `renderChoices()`의 관심사 태그 목록은 `SHUFFLE_TAGS[currentShuffle]`로 셔플마다 다른
+    `renderThemeChoices()`)을 연다. 테마 버튼 클릭(`selectTheme()`)은 아직 카탈로그를 가져오지
+    않고 선택한 테마를 `pendingThemeShuffle`에 기억한 뒤 `tier` 화면(§5.1 #15)으로 이동하며,
+    실제 `GET /api/services?shuffle=`로 카탈로그를 가져와 `services`를 교체하고 `currentShuffle`
+    상태를 갱신하는 작업은 `tier` 화면에서 주류/비주류/둘 다를 선택한 뒤(`selectTier()`)
+    `profile` 화면으로 진입할 때 일어난다(라운드 배칭/중복 제거/헬스체크 필터링 등 기존 메커니즘
+    재사용). `renderChoices()`의 관심사 태그 목록은 `SHUFFLE_TAGS[currentShuffle]`로 셔플마다 다른
     고정 어휘를 사용하며, 유형(audience) 질문은 모든 셔플이 공유한다. `profile_submit` 이벤트에는
     `metadata.shuffle`이 추가로 포함된다.
-14. **홈으로 돌아가기 내비게이션**: `landing`을 제외한 모든 화면(`theme`/`profile`/`cards`/
+14. **홈으로 돌아가기 내비게이션**: `landing`을 제외한 모든 화면(`theme`/`tier`/`profile`/`cards`/
     `results`/`ranking`)의 상단 바(`.topbar`)는 로고(`.wordmark`, `role="button"`)와 별도의
     홈 아이콘 버튼(`.home-button`, "🏠")을 함께 제공한다. 둘 다 공용 `goHome()`을 호출해 진행 중인
     라운드 상태(`index`/`batchStart`/`batchEnd`/`liked`/`dislikedThisBatch`/`history`/`audience`/
-    `interests`)를 초기화하고 `landing` 화면으로 돌아간다(기존 결과 화면의 "처음부터 다시 보기"
-    버튼과 동일한 동작이며, 그 버튼도 이제 `goHome()`을 재사용한다). 자동 전환이 아니라 사용자가
-    명시적으로 클릭했을 때만 동작하며, 어떤 화면/라운드 진행 단계에서도 접근 가능하다.
+    `interests`/`pendingThemeShuffle`)를 초기화하고 `landing` 화면으로 돌아간다(기존 결과 화면의
+    "처음부터 다시 보기" 버튼과 동일한 동작이며, 그 버튼도 이제 `goHome()`을 재사용한다). 자동
+    전환이 아니라 사용자가 명시적으로 클릭했을 때만 동작하며, 어떤 화면/라운드 진행 단계에서도
+    접근 가능하다.
+15. **테마 셔플 주류/비주류(신생) 선택**(`prd.md` §9-4 #7 / AC #15 승격): 테마 셔플
+    (`sns`/`dating`/`productivity`/`game`)의 각 카탈로그 서비스는 `CatalogService.tier`
+    (`'mainstream'|'emerging'`, 선택 필드)로 분류된다. 바이브 벤처 카탈로그처럼 이 필드가 없는
+    서비스는 서버/클라이언트 모두 `'mainstream'`으로 간주한다. `theme` 화면에서 테마를 고르면
+    바로 `tier` 화면(`renderTierChoices()`)이 뜨고 "주류 서비스 / 비주류(신생) 서비스 / 둘 다
+    (추천)" 3개 버튼을 보여준다("둘 다"는 `.choice.recommended`로 시각적으로 강조되지만 필수
+    선택지는 아니며 사용자가 직접 눌러야 다음으로 진행한다). 주류 또는 비주류를 선택하면
+    `selectTier()`가 `GET /api/services?shuffle=<테마>&tier=mainstream|emerging`을 호출하고,
+    "둘 다"를 선택하면 `tier` 파라미터 없이 `GET /api/services?shuffle=<테마>`를 호출해 두 부류를
+    모두 가져온다. `tier` 화면의 "← 테마 다시 고르기" 버튼은 `theme` 화면으로 돌아간다(홈으로 가는
+    것과는 별개 동작). 이 화면은 테마 셔플에만 존재하며 바이브 벤처 플로우에는 삽입되지 않는다.
 
 ### 5.2 백엔드 API (`apps/api/src/server.ts`)
 1. `GET /health` — 컨테이너 헬스체크용 상태 엔드포인트.
 2. `GET /api/services` — 쿼리 파라미터 `shuffle`(`vibe-venture`|`sns`|`dating`|`productivity`|`game`,
    생략 또는 미인식 값은 `vibe-venture`로 폴백, `apps/api/src/shuffles.ts`의 `resolveShuffleCatalog`)로
-   선택한 셔플의 카탈로그를 공식 링크 기준으로 중복 제거(`dedupeCatalog`)한 뒤, 각 서비스에
-   대해 `checkServiceHealth()`로 실시간 접속 가능 여부를 확인하고, 실패한 서비스를 제외한 목록을
-   반환한다. 셔플별 카탈로그는 `apps/api/src/catalogs/{sns,dating,productivity,game}.ts`에 정적으로
-   정의되어 있으며, 각 20~30개의 실서비스로 구성된다(§9-4 #5: 합법적으로 수집한 공개 정보, 직접
-   요약한 설명文).
+   선택한 셔플의 카탈로그에, 선택적 쿼리 파라미터 `tier`(`mainstream`|`emerging`, 그 외 값/생략은
+   필터링 없음 — `filterByTier()`)를 적용해 공식 링크 기준으로 중복 제거(`dedupeCatalog`)한 뒤, 각
+   서비스에 대해 `checkServiceHealth()`로 실시간 접속 가능 여부를 확인하고, 실패한 서비스를 제외한
+   목록을 반환한다. 셔플별 카탈로그는 `apps/api/src/catalogs/{sns,dating,productivity,game}.ts`에
+   정적으로 정의되어 있으며, 각 30~40개의 실서비스(주류+비주류 혼합)로 구성된다(§9-4 #5/#7:
+   합법적으로 수집한 공개 정보, 직접 요약한 설명文). `tier` 필드가 없는 엔트리(바이브 벤처 카탈로그
+   등)는 `mainstream`으로 취급한다.
 2-1. `GET /api/services/funnel`·`GET /api/services/ranking`은 `shuffles.ts`의
    `allShuffleServices()`(모든 셔플 카탈로그를 이어 붙인 배열)를 `dedupeCatalog()`로 중복 제거한
    `dedupedAllShuffles`를 집계 대상으로 사용한다 — 셔플 간 집계를 분리하지 않는다는 §9-4 #6 설계를

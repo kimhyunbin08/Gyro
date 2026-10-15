@@ -2,7 +2,7 @@ import express, { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { catalog as liveCatalog } from './catalog.js';
 import { checkServiceHealth } from './services/health-check.service.js';
-import { allShuffleServices, resolveShuffleCatalog } from './shuffles.js';
+import { allShuffleServices, filterByTier, resolveShuffleCatalog } from './shuffles.js';
 
 type Audience = 'student' | 'teacher' | 'parent' | 'other';
 type EventName =
@@ -116,7 +116,7 @@ export function createApp() {
   });
 
   app.get('/api/services', async (req, res) => {
-    const source = dedupeCatalog(resolveShuffleCatalog(req.query.shuffle));
+    const source = dedupeCatalog(filterByTier(resolveShuffleCatalog(req.query.shuffle), req.query.tier));
     const checked = await Promise.all(
       source.map(async (service) => ({ service, health: await checkServiceHealth(service.serviceUrl) }))
     );

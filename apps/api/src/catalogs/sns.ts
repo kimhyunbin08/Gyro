@@ -20,7 +20,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "1"
+    "number": "1",
+    "tier": "mainstream"
   },
   {
     "id": "sns-2",
@@ -41,7 +42,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "2"
+    "number": "2",
+    "tier": "mainstream"
   },
   {
     "id": "sns-3",
@@ -62,7 +64,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "3"
+    "number": "3",
+    "tier": "mainstream"
   },
   {
     "id": "sns-4",
@@ -83,7 +86,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "4"
+    "number": "4",
+    "tier": "mainstream"
   },
   {
     "id": "sns-5",
@@ -103,7 +107,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "5"
+    "number": "5",
+    "tier": "mainstream"
   },
   {
     "id": "sns-6",
@@ -124,7 +129,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "6"
+    "number": "6",
+    "tier": "mainstream"
   },
   {
     "id": "sns-7",
@@ -145,7 +151,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "7"
+    "number": "7",
+    "tier": "mainstream"
   },
   {
     "id": "sns-8",
@@ -166,7 +173,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "8"
+    "number": "8",
+    "tier": "mainstream"
   },
   {
     "id": "sns-9",
@@ -187,7 +195,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "9"
+    "number": "9",
+    "tier": "mainstream"
   },
   {
     "id": "sns-10",
@@ -208,7 +217,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "10"
+    "number": "10",
+    "tier": "mainstream"
   },
   {
     "id": "sns-11",
@@ -229,7 +239,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "11"
+    "number": "11",
+    "tier": "mainstream"
   },
   {
     "id": "sns-12",
@@ -250,7 +261,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "12"
+    "number": "12",
+    "tier": "mainstream"
   },
   {
     "id": "sns-13",
@@ -271,7 +283,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "13"
+    "number": "13",
+    "tier": "mainstream"
   },
   {
     "id": "sns-14",
@@ -292,7 +305,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "14"
+    "number": "14",
+    "tier": "mainstream"
   },
   {
     "id": "sns-15",
@@ -313,7 +327,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "15"
+    "number": "15",
+    "tier": "mainstream"
   },
   {
     "id": "sns-16",
@@ -333,7 +348,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "16"
+    "number": "16",
+    "tier": "mainstream"
   },
   {
     "id": "sns-17",
@@ -354,7 +370,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "17"
+    "number": "17",
+    "tier": "mainstream"
   },
   {
     "id": "sns-18",
@@ -375,7 +392,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "18"
+    "number": "18",
+    "tier": "mainstream"
   },
   {
     "id": "sns-19",
@@ -396,7 +414,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "19"
+    "number": "19",
+    "tier": "mainstream"
   },
   {
     "id": "sns-20",
@@ -417,7 +436,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "20"
+    "number": "20",
+    "tier": "mainstream"
   },
   {
     "id": "sns-21",
@@ -437,7 +457,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "21"
+    "number": "21",
+    "tier": "mainstream"
   },
   {
     "id": "sns-22",
@@ -458,7 +479,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "22"
+    "number": "22",
+    "tier": "mainstream"
   },
   {
     "id": "sns-23",
@@ -479,7 +501,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "23"
+    "number": "23",
+    "tier": "mainstream"
   },
   {
     "id": "sns-24",
@@ -500,7 +523,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "24"
+    "number": "24",
+    "tier": "mainstream"
   },
   {
     "id": "sns-25",
@@ -520,7 +544,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "25"
+    "number": "25",
+    "tier": "mainstream"
   },
   {
     "id": "sns-26",
@@ -541,7 +566,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "26"
+    "number": "26",
+    "tier": "mainstream"
   },
   {
     "id": "sns-27",
@@ -562,7 +588,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "27"
+    "number": "27",
+    "tier": "mainstream"
   },
   {
     "id": "sns-28",
@@ -583,7 +610,8 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "28"
+    "number": "28",
+    "tier": "mainstream"
   },
   {
     "id": "sns-29",
@@ -604,6 +632,228 @@ export const snsCatalog: CatalogService[] = [
     ],
     "room": "SNS",
     "roomKey": "sns",
-    "number": "29"
-  }
+    "number": "29",
+    "tier": "mainstream"
+  },
+
+  {
+    "id": "sns-30",
+    "name": "Series",
+    "tagline": "대학생을 위한 신뢰 기반 인맥 네트워크",
+    "description": "미국 대학생을 대상으로 메신저 안에서 작동하는 AI 비서가 관심사와 목표가 맞는 사람끼리 서로 동의할 때만 소개해주는 서비스입니다. 팔로워 수나 '좋아요' 대신 실제로 도움이 되는 관계 형성에 초점을 맞춘 것이 특징입니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fseries.so?w=1200",
+    "serviceUrl": "https://series.so",
+    "tags": [
+      "네트워킹",
+      "소통",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "SNS",
+    "roomKey": "sns",
+    "number": "30",
+    "tier": "emerging"
+  },
+  {
+    "id": "sns-31",
+    "name": "Yope",
+    "tagline": "광고도 알고리즘도 없는 친구 전용 공간",
+    "description": "오직 초대한 친구들끼리만 사진과 일상을 비공개로 공유하는 소셜 앱으로, 공개 피드나 추천 알고리즘이 없어 과시 대신 솔직한 기록에 집중하도록 설계되었습니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fyope.app?w=1200",
+    "serviceUrl": "https://yope.app",
+    "tags": [
+      "소통",
+      "콘텐츠공유",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "SNS",
+    "roomKey": "sns",
+    "number": "31",
+    "tier": "emerging"
+  },
+  {
+    "id": "sns-32",
+    "name": "Noplace",
+    "tagline": "텍스트로 꾸미는 나만의 아지트",
+    "description": "사진이나 영상 없이 짧은 글과 상태 메시지로 소통하는 앱으로, 프로필을 색상과 테마로 꾸미고 친한 친구 목록을 공개하는 등 초창기 인터넷 커뮤니티 감성을 되살린 Z세대용 서비스입니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fapps.apple.com%2Fus%2Fiphone%2Fstory%2Fid1872524966?w=1200",
+    "serviceUrl": "https://apps.apple.com/us/iphone/story/id1872524966",
+    "tags": [
+      "소통",
+      "커뮤니티",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "SNS",
+    "roomKey": "sns",
+    "number": "32",
+    "tier": "emerging"
+  },
+  {
+    "id": "sns-33",
+    "name": "Fizz",
+    "tagline": "우리 학교만의 비밀 게시판",
+    "description": "대학 이메일 인증을 거친 재학생들만 모이는 교내 전용 익명 커뮤니티로, 캠퍼스 생활에 대한 수다와 밈, 투표 등을 통해 학교 구성원끼리 솔직하게 소통할 수 있게 해줍니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Ffizz.social?w=1200",
+    "serviceUrl": "https://fizz.social",
+    "tags": [
+      "커뮤니티",
+      "소통",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "SNS",
+    "roomKey": "sns",
+    "number": "33",
+    "tier": "emerging"
+  },
+  {
+    "id": "sns-34",
+    "name": "Sidechat",
+    "tagline": "익명으로 나누는 캠퍼스 이야기",
+    "description": "학교 이메일로만 가입할 수 있는 익명 대학생 커뮤니티 앱으로, 실시간 캠퍼스 소식부터 소소한 일상 토크까지 같은 학교 학생들끼리 편하게 나눌 수 있는 공간을 제공합니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fsidechat.lol?w=1200",
+    "serviceUrl": "https://sidechat.lol",
+    "tags": [
+      "커뮤니티",
+      "소통",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "SNS",
+    "roomKey": "sns",
+    "number": "34",
+    "tier": "emerging"
+  },
+  {
+    "id": "sns-35",
+    "name": "Hive Social",
+    "tagline": "타임라인 중심의 작지만 단단한 소셜",
+    "description": "시간순으로 보여주는 피드와 간단한 프로필 커스터마이징을 내세운 소셜 네트워크로, 알고리즘 노출 경쟁 없이 팔로우한 사람들의 글을 차분히 확인할 수 있는 구조를 지향합니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.hivesocial.app?w=1200",
+    "serviceUrl": "https://www.hivesocial.app",
+    "tags": [
+      "소통",
+      "콘텐츠공유",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "SNS",
+    "roomKey": "sns",
+    "number": "35",
+    "tier": "emerging"
+  },
+  {
+    "id": "sns-36",
+    "name": "Spill",
+    "tagline": "문화와 유머가 살아있는 커뮤니티 공간",
+    "description": "짧은 글과 이미지, GIF를 섞어 올리는 '스필'과 실시간 음성·영상 모임 기능을 함께 제공하는 소셜 앱으로, 특정 문화권 이용자들이 안전하게 대화하고 어울릴 수 있는 공간을 표방합니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.spill.com?w=1200",
+    "serviceUrl": "https://www.spill.com",
+    "tags": [
+      "소통",
+      "커뮤니티",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "SNS",
+    "roomKey": "sns",
+    "number": "36",
+    "tier": "emerging"
+  },
+  {
+    "id": "sns-37",
+    "name": "Dispo",
+    "tagline": "하루 뒤에 현상되는 사진 한 장",
+    "description": "일회용 카메라처럼 찍은 사진이 일정 시간이 지나야 현상되어 보이는 독특한 방식의 사진 공유 앱으로, 즉흥적이고 꾸미지 않은 순간을 친구들과 나누는 데 초점을 둡니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fapps.apple.com%2Fus%2Fapp%2Fdispo-live-in-the-moment%2Fid1491684197?w=1200",
+    "serviceUrl": "https://apps.apple.com/us/app/dispo-live-in-the-moment/id1491684197",
+    "tags": [
+      "콘텐츠공유",
+      "소통",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "SNS",
+    "roomKey": "sns",
+    "number": "37",
+    "tier": "emerging"
+  },
+  {
+    "id": "sns-38",
+    "name": "문토 (Munto)",
+    "tagline": "취향으로 만나는 동네 소모임",
+    "description": "같은 관심사를 가진 사람들끼리 오프라인 소모임과 원데이 클래스를 열고 참여할 수 있는 플랫폼으로, 취미·운동·스터디 등 다양한 주제의 모임을 통해 새로운 인맥을 만들 수 있게 해줍니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.munto.kr?w=1200",
+    "serviceUrl": "https://www.munto.kr",
+    "tags": [
+      "네트워킹",
+      "커뮤니티",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "SNS",
+    "roomKey": "sns",
+    "number": "38",
+    "tier": "emerging"
+  },
+  {
+    "id": "sns-39",
+    "name": "도플 (Dople)",
+    "tagline": "익명으로 가볍게, 취향으로 깊게",
+    "description": "관심사별 익명 채팅방을 누구나 쉽게 열고 참여할 수 있는 모바일 소셜 앱으로, 구경 모드로 다른 사람들의 대화를 지켜보거나 직접 대화에 참여하며 느슨한 연결을 즐길 수 있습니다.",
+    "imageUrl": "https://s.wordpress.com/mshots/v1/https%3A%2F%2Fwww.dople.net?w=1200",
+    "serviceUrl": "https://www.dople.net",
+    "tags": [
+      "커뮤니티",
+      "소통",
+    ],
+    "audiences": [
+      "student",
+      "teacher",
+      "parent",
+      "other",
+    ],
+    "room": "SNS",
+    "roomKey": "sns",
+    "number": "39",
+    "tier": "emerging"
+  },
 ];

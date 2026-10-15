@@ -1,4 +1,7 @@
-export type CatalogService = { id: string; name: string; tagline: string; description: string; imageUrl: string; serviceUrl: string; tags: string[]; audiences: ('student'|'teacher'|'parent'|'other')[]; room: string; roomKey: string; number: string };
+// `tier` only applies to theme shuffles (sns/dating/productivity/game): prd.md §9-4 #7's
+// mainstream/emerging split. It's optional because the vibe-venture catalog has no such
+// concept; absent entries are treated as 'mainstream' (see shuffles.ts#filterByTier).
+export type CatalogService = { id: string; name: string; tagline: string; description: string; imageUrl: string; serviceUrl: string; tags: string[]; audiences: ('student'|'teacher'|'parent'|'other')[]; room: string; roomKey: string; number: string; tier?: 'mainstream'|'emerging' };
 
 export const catalog: CatalogService[] = [
   {

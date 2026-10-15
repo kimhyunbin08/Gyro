@@ -14,6 +14,22 @@ describe('Gyro discovery API', () => {
     expect(response.body.services.every((service: { health: { status: string } }) => service.health.status === 'healthy')).toBe(true);
   });
 
+  // prd.md §9-4 #7: theme shuffles expose a `?tier=mainstream|emerging` filter so the
+  // 주류/비주류 선택 screen can narrow the catalog before cards are shown.
+  it('filters theme shuffle services by ?tier=', async () => {
+    const mainstreamOnly = await request(app).get('/api/services?shuffle=sns&tier=mainstream');
+    expect(mainstreamOnly.status).toBe(200);
+    expect(mainstreamOnly.body.services.length).toBeGreaterThan(0);
+    expect(mainstreamOnly.body.services.every((service: { tier?: string }) => (service.tier ?? 'mainstream') === 'mainstream')).toBe(true);
+
+    const emergingOnly = await request(app).get('/api/services?shuffle=sns&tier=emerging');
+    expect(emergingOnly.status).toBe(200);
+    expect(emergingOnly.body.services.every((service: { tier?: string }) => service.tier === 'emerging')).toBe(true);
+
+    const unfiltered = await request(app).get('/api/services?shuffle=sns');
+    expect(unfiltered.body.services.length).toBe(mainstreamOnly.body.services.length + emergingOnly.body.services.length);
+  });
+
   it('accepts anonymous funnel events and validates payloads', async () => {
     const accepted = await request(app).post('/api/events').send({ name: 'card_like', sessionId: 'session-1234', metadata: { serviceId: 'vibe-study' } });
     expect(accepted.status).toBe(202);
