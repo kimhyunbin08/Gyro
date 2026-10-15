@@ -125,17 +125,18 @@ export function createApp() {
   // funnel drop-off for builders, purely from existing in-memory events —
   // no new event names or schema changes. "Reacted" (like+dislike+skip)
   // stands in for impressions since there is no separate card-view event.
-  // Reason-tag and retry-intent follow-up events carry metadata.stage so
-  // they don't double-count the primary card_dislike / preview-click events.
+  // Reason-tag, retry-intent, and dwell-bucket follow-up events carry
+  // metadata.stage so they don't double-count the primary card_dislike /
+  // preview-click events.
   app.get('/api/services/funnel', (_req, res) => {
     const stats = new Map<
       string,
-      { likes: number; dislikes: number; skips: number; previewClicks: number; dislikeReasons: Record<string, number>; retryIntent: { yes: number; no: number; unsure: number } }
+      { likes: number; dislikes: number; skips: number; previewClicks: number; dislikeReasons: Record<string, number>; retryIntent: { yes: number; no: number; unsure: number }; dwellBuckets: Record<string, number> }
     >();
     const entry = (serviceId: string) => {
       let s = stats.get(serviceId);
       if (!s) {
-        s = { likes: 0, dislikes: 0, skips: 0, previewClicks: 0, dislikeReasons: {}, retryIntent: { yes: 0, no: 0, unsure: 0 } };
+        s = { likes: 0, dislikes: 0, skips: 0, previewClicks: 0, dislikeReasons: {}, retryIntent: { yes: 0, no: 0, unsure: 0 }, dwellBuckets: {} };
         stats.set(serviceId, s);
       }
       return s;
@@ -159,6 +160,11 @@ export function createApp() {
         if (event.metadata.stage === 'preview_close') {
           const retryIntent = event.metadata.retryIntent;
           if (retryIntent === 'yes' || retryIntent === 'no' || retryIntent === 'unsure') entry(serviceId).retryIntent[retryIntent]++;
+          const bucket = event.metadata.dwellBucket;
+          if (typeof bucket === 'string') {
+            const s = entry(serviceId);
+            s.dwellBuckets[bucket] = (s.dwellBuckets[bucket] || 0) + 1;
+          }
         } else {
           entry(serviceId).previewClicks++;
         }
@@ -178,6 +184,7 @@ export function createApp() {
           previewClicks: s?.previewClicks || 0,
           dislikeReasons: s?.dislikeReasons || {},
           retryIntent: s?.retryIntent || { yes: 0, no: 0, unsure: 0 },
+          dwellBuckets: s?.dwellBuckets || {},
         };
       })
       .filter((entry) => entry.impressions > 0 || entry.previewClicks > 0)

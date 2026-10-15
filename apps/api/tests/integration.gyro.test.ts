@@ -84,4 +84,22 @@ describe('Gyro discovery API', () => {
     expect(entry.dislikeReasons.not_relevant).toBe(1);
     expect(entry.retryIntent.no).toBe(1);
   });
+
+  // prd.md §14.3.3 / trd.md §10.1: preview dwell time is bucketed client-side
+  // and aggregated alongside retry-intent on the same preview_close event,
+  // without inflating previewClicks.
+  it('aggregates preview dwell-time buckets from preview_close events', async () => {
+    const [, service] = catalog;
+    const sessionId = 'session-funnel-dwell';
+    await request(app).post('/api/events').send({ name: 'service_click', sessionId, metadata: { serviceId: service.id, mode: 'embed' } });
+    await request(app).post('/api/events').send({ name: 'service_click', sessionId, metadata: { serviceId: service.id, mode: 'embed', stage: 'preview_close', dwellBucket: '5-15s' } });
+    await request(app).post('/api/events').send({ name: 'service_click', sessionId, metadata: { serviceId: service.id, mode: 'embed', stage: 'preview_close', retryIntent: 'yes', dwellBucket: '15-30s' } });
+    const response = await request(app).get('/api/services/funnel');
+    expect(response.status).toBe(200);
+    const entry = response.body.funnel.find((f: { id: string }) => f.id === service.id);
+    expect(entry.previewClicks).toBe(1);
+    expect(entry.dwellBuckets['5-15s']).toBe(1);
+    expect(entry.dwellBuckets['15-30s']).toBe(1);
+    expect(entry.retryIntent.yes).toBe(1);
+  });
 });
