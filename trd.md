@@ -3,6 +3,7 @@
 ## 1. 문서 목적
 - `prd.md`를 구현 가능한 기술 요구사항으로 고정한다.
 - 현재 저장소에 실제로 구현·배포된 아키텍처, API, 데이터 모델을 정의한다.
+- 승격됐으나 미구현인 요구사항은 상태를 명시하고 현재 API 계약과 구분한다(§11).
 
 ## 2. 범위
 ### 2.1 In Scope (Web MVP)
@@ -11,6 +12,9 @@
 3. 익명 퍼널 이벤트 수집 및 이메일 리드 저장(중복 방지).
 4. 스와이프 이유/미리보기 재체험 의향 마이크로 피드백 + 서비스별 퍼널 드롭오프 집계 통계
    (Phase 2 §14.3 승격, 계정 불필요).
+5. 작업 기준 발견 + 검증된 연결 가이드 3단계(`prd.md` §9-6 승격, **미구현**, 상세 §11):
+   유형·작업 기반 카탈로그/가이드 → 검증 수준 배지 → 익명 연결 결과 피드백·집계.
+   기존 API를 후방 호환 확장하며 신규 엔드포인트·계정·외부 스킬/MCP 자동 실행은 도입하지 않는다.
 
 ### 2.2 Out of Scope (Deferred)
 1. 로그인/회원가입, 사용자 계정/프로필 영속화.
@@ -314,71 +318,6 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
    않도록 한다.
 3. 이벤트 저장소는 최대 5000건으로 제한해 메모리 누수를 방지한다.
 
-## 11. 작업 기준 발견 + 검증된 연결 가이드 기술 설계 (`prd.md` §9-6 승격, 📝 미구현)
-
-모든 변경은 **후방 호환 optional 필드/값 추가**로 하며 기존 API 계약·테마 셔플 동작을 바꾸지 않는다.
-신규 엔드포인트는 만들지 않고 기존 `GET /api/services`, `POST /api/events`, `GET /api/services/funnel`을
-확장한다(AGENTS.md §5 최소 API 세트 유지).
-
-### 11.1 데이터 모델 (`apps/api/src/catalog.ts`)
-```ts
-type CatalogService = CatalogService & {            // 모두 optional, 미지정 = 기존 서비스
-  kind?: 'product' | 'service' | 'skill' | 'mcp';   // 기본 'service'
-  tasks?: string[];                                  // 해결하는 작업 태그 (예: 'report-automation')
-  connection?: {                                     // skill/mcp 전용
-    agents: { name: string; versionNote?: string }[];  // 지원 클라이언트/버전, 모르면 []
-    transport?: 'stdio' | 'http' | 'sse';            // mcp
-    runtime?: 'local' | 'remote';                    // mcp
-    auth?: 'none' | 'api_key' | 'oauth' | 'unknown';
-    permissions: string[];                           // 필요 권한·키 설명
-    installSteps: string[];                          // 한국어 설치 단계
-    exampleUsage?: string;                           // 한 줄 사용 예시
-    docsUrl: string;
-  };
-  verification?: {                                   // 기본 level 'link'
-    level: 'link' | 'docs' | 'install';
-    verifiedAt?: string; environment?: string;       // docs/install은 verifiedAt 필수, install은 environment 필수
-    sources: string[];                               // 조사 출처
-  };
-};
-```
-- `verification.level`은 카탈로그 파일에 사람이 기록한 값이며 헬스체크 결과로 자동 상승하지 않는다.
-  `link`는 기존 헬스체크 통과를 의미한다(응답 `health`와 별개).
-- `skill`/`mcp` 항목도 `serviceUrl`(공식 페이지)을 가지므로 기존 헬스체크·중복 제거·이미지 프록시를
-  그대로 사용한다. 이미지가 없는 항목은 텍스트 기반 대체 UI를 쓴다.
-- 카탈로그 로드 시 `connection`/`verification`의 필수 조건 위반(위 주석)은 테스트에서 실패 처리한다.
-
-### 11.2 API 변경
-- `GET /api/services?shuffle=task`(신규 shuffle 값, 기존 값은 그대로) + 선택 `&task=<태그>`·`&kind=<유형>`
-  필터. 미인식 `task`/`kind`는 필터 없음이 아니라 빈 결과가 되지 않도록 무시하고 전체 task 셔플을 반환한다.
-  응답 `Service`에 위 optional 필드가 그대로 포함된다.
-- `POST /api/events`: `EventName`에 `connection_report` 추가.
-  `metadata: { serviceId: string; outcome: 'success'|'partial'|'fail'; reason?: ConnectionReason; agent?: string }`,
-  `ConnectionReason = 'install_blocked'|'auth_issue'|'permission_issue'|'incompatible'|'docs_outdated'|'other'`.
-  서버는 `outcome`/`reason` 허용값만 추가 검증한다. 키·토큰·설정 파일 내용은 받지 않는다.
-- `GET /api/services/funnel`의 `FunnelEntry`에 `connection?: { success; partial; fail; reasons: Record<string, number> }`
-  추가. `docClicks`는 별도 카운터(`service_click`의 `mode:'guide'`)로 분리하며 성공으로 합산하지 않는다.
-  기존 필드·집계는 변경하지 않으며, 추천 점수·정렬에 사용하지 않는다.
-
-### 11.3 프론트엔드
-- 랜딩에 "작업으로 찾기" 진입 → 작업 선택 화면 → 기존 프로필 질문 생략 가능(작업이 곧 선호) → 스와이프.
-  기존 `matchScore`는 `tasks` 일치를 가산하는 방식으로 확장하되 기존 항목 점수는 변하지 않는다.
-- 카드: 유형 뱃지 + 검증 배지(링크/문서/설치 + 검증일). `kind`가 `skill`/`mcp`이면 "미리보기" 대신
-  "연결 가이드" 패널(§11.1 `connection` 렌더링, 누락 값은 "확인 안 됨")을 연다.
-- 가이드 패널 하단에 선택적 연결 결과 폼(성공/일부 성공/실패 + 실패 이유 태그, 스킵·닫기 가능).
-  제출 실패가 UX를 막지 않는다(기존 이벤트 전송 방식과 동일하게 fire-and-forget).
-- 외부 링크는 `rel="noopener noreferrer"`, 가이드의 외부 텍스트는 이스케이프(textContent)로 렌더링한다.
-
-### 11.4 테스트
-- API: `kind`/`task` 필터, 유형 미지정 항목의 기존 동작 회귀, `connection_report` 값 검증(400 케이스),
-  funnel 집계에서 `connection`과 `docClicks` 분리, 카탈로그 스키마 불변식(`docs`/`install` 필수 필드).
-- Web: 연결 가이드 렌더링(누락 값 "확인 안 됨"), 스킬/MCP에서 iframe 미리보기 미노출, 검증 배지 표시.
-
-### 11.5 롤아웃 및 이후 단계
-1) §11.1 스키마 + 큐레이션 20~30개 + 카드/가이드 UI → 2) 검증 배지 → 3) 연결 결과 피드백·집계.
-이후(별도 승격): 에이전트용 읽기 전용 조회, 공급자 제출·런치 보드(§10.2 빌더 계정 연계).
-외부 콘텐츠를 에이전트에 반환하는 단계가 오면 프롬프트 인젝션·요청 제한·캐시 설계를 선행한다.
-
 ## 10. Phase 2 — "검증 루프" 기술 설계 초안 (§10.1 구현 완료, §10.2 이후 미구현)
 
 > `prd.md` §14의 요구사항 초안에 대응하는 기술 설계 초안이다. §10.1(§14.3, 계정 불필요)은
@@ -464,3 +403,68 @@ type CatalogService = CatalogService & {            // 모두 optional, 미지�
 5. 검증 배지, A/B 카드 테스트, 버전 이력 비교는 대시보드 안정화 후 순차 추가.
 6. 피드백 포털 무료 열람(`GET .../feedback`)은 §10.2 최소 버전과 함께 제공하고, 유료 개선 리포트
    (`POST .../improvement-report`)는 PG 연동·환불 정책 확정 후 마지막 단계로 추가한다.
+
+## 11. 작업 기준 발견 + 검증된 연결 가이드 기술 설계 (`prd.md` §9-6 승격, 📝 미구현)
+
+모든 변경은 **후방 호환 optional 필드/값 추가**로 하며 기존 API 계약·테마 셔플 동작을 바꾸지 않는다.
+신규 엔드포인트는 만들지 않고 기존 `GET /api/services`, `POST /api/events`, `GET /api/services/funnel`을
+확장한다(AGENTS.md §5 최소 API 세트 유지).
+
+### 11.1 데이터 모델 (`apps/api/src/catalog.ts`)
+```ts
+type CatalogService = CatalogService & {            // 모두 optional, 미지정 = 기존 서비스
+  kind?: 'product' | 'service' | 'skill' | 'mcp';   // 기본 'service'
+  tasks?: string[];                                  // 해결하는 작업 태그 (예: 'report-automation')
+  connection?: {                                     // skill/mcp 전용
+    agents: { name: string; versionNote?: string }[];  // 지원 클라이언트/버전, 모르면 []
+    transport?: 'stdio' | 'http' | 'sse';            // mcp
+    runtime?: 'local' | 'remote';                    // mcp
+    auth?: 'none' | 'api_key' | 'oauth' | 'unknown';
+    permissions: string[];                           // 필요 권한·키 설명
+    installSteps: string[];                          // 한국어 설치 단계
+    exampleUsage?: string;                           // 한 줄 사용 예시
+    docsUrl: string;
+  };
+  verification?: {                                   // 기본 level 'link'
+    level: 'link' | 'docs' | 'install';
+    verifiedAt?: string; environment?: string;       // docs/install은 verifiedAt 필수, install은 environment 필수
+    sources: string[];                               // 조사 출처
+  };
+};
+```
+- `verification.level`은 카탈로그 파일에 사람이 기록한 값이며 헬스체크 결과로 자동 상승하지 않는다.
+  `link`는 기존 헬스체크 통과를 의미한다(응답 `health`와 별개).
+- `skill`/`mcp` 항목도 `serviceUrl`(공식 페이지)을 가지므로 기존 헬스체크·중복 제거·이미지 프록시를
+  그대로 사용한다. 이미지가 없는 항목은 텍스트 기반 대체 UI를 쓴다.
+- 카탈로그 로드 시 `connection`/`verification`의 필수 조건 위반(위 주석)은 테스트에서 실패 처리한다.
+
+### 11.2 API 변경
+- `GET /api/services?shuffle=task`(신규 shuffle 값, 기존 값은 그대로) + 선택 `&task=<태그>`·`&kind=<유형>`
+  필터. 미인식 `task`/`kind`는 필터 없음이 아니라 빈 결과가 되지 않도록 무시하고 전체 task 셔플을 반환한다.
+  응답 `Service`에 위 optional 필드가 그대로 포함된다.
+- `POST /api/events`: `EventName`에 `connection_report` 추가.
+  `metadata: { serviceId: string; outcome: 'success'|'partial'|'fail'; reason?: ConnectionReason; agent?: string }`,
+  `ConnectionReason = 'install_blocked'|'auth_issue'|'permission_issue'|'incompatible'|'docs_outdated'|'other'`.
+  서버는 `outcome`/`reason` 허용값만 추가 검증한다. 키·토큰·설정 파일 내용은 받지 않는다.
+- `GET /api/services/funnel`의 `FunnelEntry`에 `connection?: { success; partial; fail; reasons: Record<string, number> }`
+  추가. `docClicks`는 별도 카운터(`service_click`의 `mode:'guide'`)로 분리하며 성공으로 합산하지 않는다.
+  기존 필드·집계는 변경하지 않으며, 추천 점수·정렬에 사용하지 않는다.
+
+### 11.3 프론트엔드
+- 랜딩에 "작업으로 찾기" 진입 → 작업 선택 화면 → 기존 프로필 질문 생략 가능(작업이 곧 선호) → 스와이프.
+  기존 `matchScore`는 `tasks` 일치를 가산하는 방식으로 확장하되 기존 항목 점수는 변하지 않는다.
+- 카드: 유형 뱃지 + 검증 배지(링크/문서/설치 + 검증일). `kind`가 `skill`/`mcp`이면 "미리보기" 대신
+  "연결 가이드" 패널(§11.1 `connection` 렌더링, 누락 값은 "확인 안 됨")을 연다.
+- 가이드 패널 하단에 선택적 연결 결과 폼(성공/일부 성공/실패 + 실패 이유 태그, 스킵·닫기 가능).
+  제출 실패가 UX를 막지 않는다(기존 이벤트 전송 방식과 동일하게 fire-and-forget).
+- 외부 링크는 `rel="noopener noreferrer"`, 가이드의 외부 텍스트는 이스케이프(textContent)로 렌더링한다.
+
+### 11.4 테스트
+- API: `kind`/`task` 필터, 유형 미지정 항목의 기존 동작 회귀, `connection_report` 값 검증(400 케이스),
+  funnel 집계에서 `connection`과 `docClicks` 분리, 카탈로그 스키마 불변식(`docs`/`install` 필수 필드).
+- Web: 연결 가이드 렌더링(누락 값 "확인 안 됨"), 스킬/MCP에서 iframe 미리보기 미노출, 검증 배지 표시.
+
+### 11.5 롤아웃 및 이후 단계
+1) §11.1 스키마 + 큐레이션 20~30개 + 카드/가이드 UI → 2) 검증 배지 → 3) 연결 결과 피드백·집계.
+이후(별도 승격): 에이전트용 읽기 전용 조회, 공급자 제출·런치 보드(§10.2 빌더 계정 연계).
+외부 콘텐츠를 에이전트에 반환하는 단계가 오면 프롬프트 인젝션·요청 제한·캐시 설계를 선행한다.
