@@ -11,7 +11,7 @@ apps/api/uploads/
 .env
 *.env
 .env.*
+.themeai/
 apps/web/.env
 kakao_key.txt
 apps/web/public/kakao_key.txt
-

@@ -1,5 +1,6 @@
 import './styles.css';
 import { createCatalogLoader, type CatalogService as Service, type CatalogKind, type CatalogShuffle as ShuffleId, type CatalogTier as ServiceTier } from './catalog-loader.js';
+import { searchCatalogServices, type ServiceSearchKind } from './service-search.js';
 
 type Audience = 'student' | 'teacher' | 'parent' | 'other';
 // Runtime config is fetched (not baked into the JS bundle) so the public web
@@ -81,12 +82,36 @@ const SHUFFLE_TAGS: Record<ShuffleId,string[]> = {
 };
 let currentShuffle: ShuffleId = 'vibe-venture';
 const catalogLoader = createCatalogLoader(API);
+type AppearanceTheme = 'paper' | 'clay' | 'midnight';
+const APPEARANCE_THEMES: AppearanceTheme[] = ['paper', 'clay', 'midnight'];
+const DEFAULT_APPEARANCE_THEME: AppearanceTheme = 'midnight';
+const APPEARANCE_THEME_STORAGE_KEY = 'gyro.appearance-theme';
+let homeCatalogServices: Service[] = [];
+let homeCatalogState: 'loading' | 'ready' | 'error' = 'loading';
+let selectedHomeKind: ServiceSearchKind = 'all';
 let profileCatalogReady = false;
 let profileCatalogError = false;
 let profileLoadToken = 0;
 const $ = <T extends HTMLElement>(id:string) => document.getElementById(id) as T;
 const screens = ['landing','theme','tier','task-discovery','profile','cards','results','ranking'];
-function show(id:string){screens.forEach(x => $(x).classList.toggle('hidden', x !== id)); window.scrollTo({top:0,behavior:'smooth'});}
+function syncPrimaryNav(screen: string): void {
+  const activeId = screen === 'ranking'
+    ? 'ranking-nav'
+    : screen === 'theme' || screen === 'tier'
+      ? 'theme-entry-button'
+      : screen === 'task-discovery' || currentShuffle === 'task'
+        ? 'task-entry-button'
+        : ['sns', 'dating', 'productivity', 'game'].includes(currentShuffle)
+          ? 'theme-entry-button'
+          : 'discover-nav';
+  document.querySelectorAll<HTMLButtonElement>('[data-primary-nav]').forEach(button => {
+    const active = button.id === activeId;
+    button.classList.toggle('nav-link-active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+}
+function show(id:string){screens.forEach(x => $(x).classList.toggle('hidden', x !== id));syncPrimaryNav(id);window.scrollTo({top:0,behavior:'smooth'});}
 function track(name:string, metadata:Record<string,unknown>={}){void fetch(`${API}/api/events`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,sessionId,metadata})}).catch(()=>{});}
 function startBatch(){ batchStart = index; batchEnd = Math.min(index + BATCH_SIZE, services.length); dislikedThisBatch = []; }
 function renderChoices(){const audiences:[Audience,string][]=[['student','학생이에요'],['teacher','선생님이에요'],['parent','학부모예요'],['other','그 외예요']];$('audience-choices').innerHTML=audiences.map(([id,label])=>`<button class="choice ${audience===id?'selected':''}" data-audience="${id}">${label}</button>`).join(''); document.querySelectorAll<HTMLElement>('[data-audience]').forEach(b=>b.onclick=()=>{audience=b.dataset.audience as Audience;renderChoices();checkProfile();}); const tags=SHUFFLE_TAGS[currentShuffle];$('interest-choices').innerHTML=tags.map(tag=>`<button class="tag ${interests.has(tag)?'selected':''}" data-interest="${tag}">${tag}</button>`).join('');document.querySelectorAll<HTMLElement>('[data-interest]').forEach(b=>b.onclick=()=>{const tag=b.dataset.interest!;interests.has(tag)?interests.delete(tag):interests.add(tag);renderChoices();checkProfile();});}
@@ -206,6 +231,125 @@ function verificationLabel(service: Service): string {
 }
 function isGuideService(service: Service): boolean {
   return service.kind === 'skill' || service.kind === 'mcp';
+}
+function createHomeServiceCard(service: Service): HTMLElement {
+  const article = document.createElement('article');
+  article.className = 'home-product-card';
+
+  const media = document.createElement('div');
+  media.className = 'home-product-image image-fallback';
+  const initial = document.createElement('span');
+  initial.className = 'home-product-initial';
+  initial.setAttribute('aria-hidden', 'true');
+  initial.textContent = service.name.charAt(0);
+  media.append(initial);
+  if (service.imageUrl) {
+    const image = new Image();
+    image.alt = `${service.name} 화면 미리보기`;
+    image.onload = () => media.classList.remove('image-fallback');
+    image.onerror = () => image.remove();
+    image.src = resolveImageUrl(service.imageUrl);
+    media.append(image);
+  }
+
+  const copy = document.createElement('div');
+  copy.className = 'home-product-copy';
+  const labels = document.createElement('div');
+  labels.className = 'home-product-labels';
+  const kind = document.createElement('span');
+  kind.className = 'kind-badge';
+  kind.textContent = kindLabel(service.kind);
+  labels.append(kind);
+  for (const tag of service.tags.slice(0, 2)) {
+    const badge = document.createElement('span');
+    badge.className = 'home-product-tag';
+    badge.textContent = tag;
+    labels.append(badge);
+  }
+
+  const title = document.createElement('button');
+  title.type = 'button';
+  title.className = 'home-product-title';
+  title.textContent = service.name;
+  title.onclick = () => isGuideService(service) ? openGuide(service) : openPreview(service);
+  const tagline = document.createElement('p');
+  tagline.className = 'home-product-tagline';
+  tagline.textContent = service.tagline;
+  const verification = document.createElement('p');
+  verification.className = 'home-product-verification';
+  verification.textContent = verificationLabel(service);
+  copy.append(labels, title, tagline, verification);
+
+  const footer = document.createElement('div');
+  footer.className = 'home-product-footer';
+  const officialLink = document.createElement('a');
+  officialLink.className = 'home-product-link';
+  officialLink.href = service.serviceUrl;
+  officialLink.target = '_blank';
+  officialLink.rel = 'noopener noreferrer';
+  officialLink.textContent = '공식 페이지 ↗';
+  officialLink.addEventListener('click', () => track('service_click', { serviceId: service.id, mode: 'official' }));
+  const preview = document.createElement('button');
+  preview.type = 'button';
+  preview.className = 'home-product-preview';
+  preview.textContent = isGuideService(service) ? '연결 가이드' : '미리보기';
+  preview.onclick = () => isGuideService(service) ? openGuide(service) : openPreview(service);
+  footer.append(officialLink, preview);
+  article.append(media, copy, footer);
+  return article;
+}
+function renderHomeCatalog(): void {
+  const input = $<HTMLInputElement>('service-search');
+  const query = input.value.trim();
+  const matches = searchCatalogServices(homeCatalogServices, query, selectedHomeKind);
+  const items = query || selectedHomeKind !== 'all' ? matches : matches.slice(0, 8);
+  const status = $('home-catalog-status');
+  const list = $('home-service-list');
+  list.replaceChildren();
+
+  if (homeCatalogState === 'loading') {
+    status.textContent = '서비스 목록을 불러오고 있어요.';
+    return;
+  }
+  if (homeCatalogState === 'error') {
+    status.textContent = '서비스 목록을 불러오지 못했어요.';
+    const empty = document.createElement('p');
+    empty.className = 'home-empty';
+    empty.textContent = '잠시 후 다시 시도해 주세요.';
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'text-button';
+    retry.textContent = '다시 불러오기 →';
+    retry.onclick = () => { void loadHomeCatalog(); };
+    list.append(empty, retry);
+    return;
+  }
+  if (items.length === 0) {
+    status.textContent = '검색 결과가 없어요.';
+    const empty = document.createElement('p');
+    empty.className = 'home-empty';
+    empty.textContent = query ? '다른 검색어나 서비스 유형을 선택해 보세요.' : '이 유형의 서비스는 아직 준비 중이에요.';
+    list.append(empty);
+    return;
+  }
+
+  status.textContent = query || selectedHomeKind !== 'all'
+    ? `${matches.length}개 서비스`
+    : `${homeCatalogServices.length}개 중 ${items.length}개 표시`;
+  list.append(...items.map(createHomeServiceCard));
+}
+function loadHomeCatalog(): Promise<void> {
+  homeCatalogState = 'loading';
+  renderHomeCatalog();
+  return catalogLoader.getServices('vibe-venture').then((loaded) => {
+    homeCatalogServices = loaded;
+    homeCatalogState = 'ready';
+    renderHomeCatalog();
+  }).catch((error: unknown) => {
+    homeCatalogState = 'error';
+    console.error('홈 서비스 카탈로그를 불러오지 못했습니다.', error);
+    renderHomeCatalog();
+  });
 }
 function renderCard(){
   if (index >= batchEnd) { finishBatch(); return; }
@@ -555,6 +699,43 @@ async function openRanking(origin: 'landing' | 'results'){
   }
 }
 function closeRanking(){ show(rankingOrigin); }
+function isAppearanceTheme(value: string | null): value is AppearanceTheme {
+  return value !== null && APPEARANCE_THEMES.some(theme => theme === value);
+}
+function applyAppearanceTheme(theme: AppearanceTheme, persist = false): void {
+  document.documentElement.dataset.theme = theme;
+  document.querySelectorAll<HTMLButtonElement>('[data-app-theme]').forEach(button => {
+    button.setAttribute('aria-pressed', String(button.dataset.appTheme === theme));
+  });
+  if (!persist) return;
+  try {
+    const storage = globalThis.localStorage;
+    if (typeof storage?.setItem !== 'function') {
+      $('theme-settings-status').textContent = '이 환경에서는 테마 설정을 저장할 수 없어요.';
+      return;
+    }
+    storage.setItem(APPEARANCE_THEME_STORAGE_KEY, theme);
+    $('theme-settings-status').textContent = '';
+  } catch (error) {
+    console.error('화면 테마 설정을 저장하지 못했습니다.', error);
+    $('theme-settings-status').textContent = '테마는 적용했지만 설정을 저장하지 못했어요.';
+  }
+}
+function restoreAppearanceTheme(): void {
+  applyAppearanceTheme(DEFAULT_APPEARANCE_THEME);
+  try {
+    const storage = globalThis.localStorage;
+    if (typeof storage?.getItem !== 'function') return;
+    const saved = storage.getItem(APPEARANCE_THEME_STORAGE_KEY);
+    if (isAppearanceTheme(saved)) applyAppearanceTheme(saved);
+  } catch (error) {
+    console.error('저장된 화면 테마를 읽지 못했습니다.', error);
+  }
+}
+function closeThemeSettings(): void {
+  $('theme-settings').classList.add('hidden');
+  $<HTMLButtonElement>('theme-settings-button').setAttribute('aria-expanded', 'false');
+}
 const startButton = $<HTMLButtonElement>('start-button');
 const startButtonDefaultText = startButton.textContent ?? '';
 // prd.md §9 item 6: an empty catalog (all exhibits currently unreachable) must show a
@@ -633,7 +814,7 @@ const THEME_IDS: Exclude<ShuffleId,'vibe-venture'>[] = ['sns','dating','producti
 let pendingThemeShuffle: Exclude<ShuffleId,'vibe-venture'> | null = null;
 function renderThemeChoices(){
   $('theme-choices').innerHTML = THEME_IDS.map(id => `<button class="choice" data-theme="${id}">${SHUFFLE_LABELS[id]}</button>`).join('');
-  document.querySelectorAll<HTMLButtonElement>('[data-theme]').forEach(b => b.onclick = () => selectTheme(b.dataset.theme as Exclude<ShuffleId,'vibe-venture'>));
+  document.querySelectorAll<HTMLButtonElement>('#theme-choices [data-theme]').forEach(b => b.onclick = () => selectTheme(b.dataset.theme as Exclude<ShuffleId,'vibe-venture'>));
 }
 // Theme selection only records the pending shuffle and moves to the
 // 주류/비주류 choice; the actual catalog fetch (and its "준비 중" / "불러오지
@@ -672,7 +853,7 @@ taskEntryButton.onclick = () => {
 // every non-landing screen, plus the results screen's "처음부터 다시 보기"
 // button, all reset in-progress round state and return to landing. This is
 // always a manual, user-triggered navigation (never automatic).
-function goHome(){profileLoadToken++;taskLoadToken++;index=0;batchStart=0;batchEnd=0;liked=[];dislikedThisBatch=[];history=[];audience=null;interests.clear();selectedTask=null;pendingThemeShuffle=null;show('landing');}
+function goHome(){profileLoadToken++;taskLoadToken++;index=0;batchStart=0;batchEnd=0;liked=[];dislikedThisBatch=[];history=[];audience=null;interests.clear();selectedTask=null;currentShuffle='vibe-venture';pendingThemeShuffle=null;show('landing');}
 $('theme-back').onclick = goHome;
 $('task-back').onclick = goHome;
 $('tier-back').onclick = () => { renderThemeChoices(); show('theme'); };
@@ -688,11 +869,58 @@ $('continue-button').onclick=()=>{startBatch();show('cards');renderCard();};
 $('restart-button').onclick=goHome;
 $('email-form').onsubmit=async e=>{e.preventDefault();const message=$('email-message');try{const r=await fetch(`${API}/api/email-leads`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$<HTMLInputElement>('email').value,updatesOptIn:$<HTMLInputElement>('updates').checked})});const body=await r.json();if(!r.ok)throw new Error(body.message);message.textContent='결과를 저장했어요.';track('email_submit',{updatesOptIn:$<HTMLInputElement>('updates').checked});}catch(error){message.textContent=error instanceof Error?error.message:'저장에 실패했어요.';}};
 $('preview-close').onclick=requestClosePreview;
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('guide-overlay').classList.contains('hidden'))closeGuide();else requestClosePreview();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('theme-settings').classList.contains('hidden'))closeThemeSettings();else if(!$('guide-overlay').classList.contains('hidden'))closeGuide();else requestClosePreview();}});
 $('guide-close').onclick=closeGuide;
 $('guide-skip').onclick=closeGuide;
 document.querySelectorAll<HTMLButtonElement>('[data-retry-intent]').forEach(b=>b.onclick=()=>answerRetryIntent(b.dataset.retryIntent as 'yes'|'no'|'unsure'));
 $('retry-intent-skip').onclick=closePreview;
-$('ranking-link-landing').onclick=()=>openRanking('landing');
 $('ranking-link-results').onclick=()=>openRanking('results');
+$('ranking-nav').onclick=()=>openRanking('landing');
 $('ranking-back').onclick=closeRanking;
+$('home-ranking-entry').onclick=()=>openRanking('landing');
+$('browse-categories').onclick=()=>themeEntryButton.click();
+$('browse-tasks').onclick=()=>taskEntryButton.click();
+$('discover-nav').onclick=()=>{
+  if($('landing').classList.contains('hidden'))goHome();
+  $<HTMLInputElement>('service-search').focus();
+};
+$('brand-home').onclick=event=>{event.preventDefault();goHome();};
+$('home-search-form').onsubmit=(event)=>{event.preventDefault();renderHomeCatalog();};
+$('service-search').addEventListener('input',()=>{
+  $('clear-search').classList.toggle('hidden',!$<HTMLInputElement>('service-search').value);
+  renderHomeCatalog();
+});
+$('clear-search').onclick=()=>{
+  $<HTMLInputElement>('service-search').value='';
+  $('clear-search').classList.add('hidden');
+  renderHomeCatalog();
+  $<HTMLInputElement>('service-search').focus();
+};
+document.querySelectorAll<HTMLButtonElement>('[data-home-kind]').forEach(button=>button.onclick=()=>{
+  const kind=button.dataset.homeKind;
+  if(kind!=='all'&&kind!=='product'&&kind!=='service'&&kind!=='skill'&&kind!=='mcp')return;
+  selectedHomeKind=kind;
+  document.querySelectorAll<HTMLButtonElement>('[data-home-kind]').forEach(filter=>{
+    const selected=filter===button;
+    filter.classList.toggle('selected',selected);
+    filter.setAttribute('aria-pressed',String(selected));
+  });
+  renderHomeCatalog();
+});
+const themeSettingsButton=$<HTMLButtonElement>('theme-settings-button');
+themeSettingsButton.onclick=()=>{
+  const settings=$('theme-settings');
+  const willOpen=settings.classList.contains('hidden');
+  settings.classList.toggle('hidden',!willOpen);
+  themeSettingsButton.setAttribute('aria-expanded',String(willOpen));
+};
+document.querySelectorAll<HTMLButtonElement>('[data-app-theme]').forEach(button=>button.onclick=()=>{
+  const theme=button.dataset.appTheme;
+  if(theme==='paper'||theme==='clay'||theme==='midnight')applyAppearanceTheme(theme,true);
+});
+document.addEventListener('click',event=>{
+  const wrapper=$('theme-settings').parentElement!;
+  if(event.target instanceof Node&&!wrapper.contains(event.target))closeThemeSettings();
+});
+restoreAppearanceTheme();
+void loadHomeCatalog();
