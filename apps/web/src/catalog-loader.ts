@@ -1,5 +1,6 @@
-export type CatalogShuffle = 'vibe-venture' | 'sns' | 'dating' | 'productivity' | 'game';
+export type CatalogShuffle = 'vibe-venture' | 'sns' | 'dating' | 'productivity' | 'game' | 'task';
 export type CatalogTier = 'mainstream' | 'emerging';
+export type CatalogKind = 'product' | 'service' | 'skill' | 'mcp';
 export type CatalogService = {
   id: string;
   name: string;
@@ -9,7 +10,21 @@ export type CatalogService = {
   serviceUrl: string;
   tags: string[];
   audiences: ('student' | 'teacher' | 'parent' | 'other')[];
+  health?: { status: 'healthy'; checkedAt: string };
   tier?: CatalogTier;
+  kind?: CatalogKind;
+  tasks?: string[];
+  connection?: {
+    agents: { name: string; versionNote?: string }[];
+    transport?: 'stdio' | 'http' | 'sse';
+    runtime?: 'local' | 'remote';
+    auth?: 'none' | 'api_key' | 'oauth' | 'unknown';
+    permissions: string[];
+    installSteps: string[];
+    exampleUsage?: string;
+    docsUrl: string;
+  };
+  verification?: { level: 'link' | 'docs' | 'install'; verifiedAt?: string; environment?: string; sources: string[] };
 };
 
 const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -17,14 +32,17 @@ const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
 type CacheEntry = { promise: Promise<CatalogService[]>; expiresAt: number | null };
 
 export function createCatalogLoader(apiBase: string, request: typeof fetch = fetch) {
-  const cache = new Map<CatalogShuffle, CacheEntry>();
+  const cache = new Map<string, CacheEntry>();
 
-  function loadShuffle(shuffle: CatalogShuffle): Promise<CatalogService[]> {
-    const cached = cache.get(shuffle);
+  function loadShuffle(shuffle: CatalogShuffle, filters: { task?: string; kind?: CatalogKind } = {}): Promise<CatalogService[]> {
+    const query = new URLSearchParams({ shuffle });
+    if (filters.task) query.set('task', filters.task);
+    if (filters.kind) query.set('kind', filters.kind);
+    const cacheKey = query.toString();
+    const cached = cache.get(cacheKey);
     if (cached && (cached.expiresAt === null || cached.expiresAt > Date.now())) return cached.promise;
 
     const entry: CacheEntry = { promise: Promise.resolve([]), expiresAt: null };
-    const query = new URLSearchParams({ shuffle });
     entry.promise = request(`${apiBase}/api/services?${query.toString()}`)
       .then(async (response) => {
         if (!response.ok) throw new Error(`서비스 카탈로그 요청 실패: ${response.status}`);
@@ -39,10 +57,10 @@ export function createCatalogLoader(apiBase: string, request: typeof fetch = fet
         return services;
       })
       .catch((error: unknown) => {
-        if (cache.get(shuffle) === entry) cache.delete(shuffle);
+        if (cache.get(cacheKey) === entry) cache.delete(cacheKey);
         throw error;
       });
-    cache.set(shuffle, entry);
+    cache.set(cacheKey, entry);
     return entry.promise;
   }
 
@@ -55,6 +73,9 @@ export function createCatalogLoader(apiBase: string, request: typeof fetch = fet
     },
     preloadTheme(shuffle: Exclude<CatalogShuffle, 'vibe-venture'>): Promise<void> {
       return loadShuffle(shuffle).then(() => undefined);
+    },
+    getTaskServices(task: string, kind?: CatalogKind): Promise<CatalogService[]> {
+      return loadShuffle('task', { task, kind });
     },
   };
 }

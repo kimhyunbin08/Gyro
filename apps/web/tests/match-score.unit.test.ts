@@ -46,6 +46,7 @@ describe('web unit: interest/audience-weighted match scoring', () => {
     expect(matchScore(service, 'student', interests)).toBe(INTEREST_WEIGHT);
     // One matched tag plus an audience match.
     expect(matchScore(service, 'teacher', interests)).toBe(INTEREST_WEIGHT + AUDIENCE_WEIGHT);
+    expect(matchScore({ ...service, tasks: ['report-automation'] }, null, new Set(), 'report-automation')).toBe(INTEREST_WEIGHT);
     // No matched tags, no audience match.
     expect(matchScore(service, 'parent', new Set())).toBe(0);
   });

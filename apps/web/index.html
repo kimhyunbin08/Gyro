@@ -16,6 +16,7 @@
           <p class="lede">몇 장의 카드에 반응하면, 지금 바로 써볼 만한 서비스와 활용법을 찾아드려요.</p>
           <button class="button button-dark" id="start-button">바이브 벤처 <span aria-hidden="true">→</span></button>
           <button class="button button-outline" id="theme-entry-button">서비스 이용하기 <span aria-hidden="true">→</span></button>
+          <button class="button button-outline" id="task-entry-button">작업으로 찾기 <span aria-hidden="true">→</span></button>
           <p class="privacy-note">로그인 없이 시작하고, 결과는 이메일 없이도 볼 수 있어요.</p>
           <button class="text-button" id="ranking-link-landing">🏆 가장 많이 선택된 서비스 랭킹 보기</button>
         </div>
@@ -37,6 +38,17 @@
           <p class="eyebrow">어떤 서비스를 보여드릴까요?</p>
           <h2 id="tier-title">주류 서비스 vs<br /><em>성장 중인 신생 서비스</em></h2>
           <div class="choice-grid" id="tier-choices" role="group" aria-label="서비스 유형 선택"></div>
+        </div>
+      </section>
+
+      <section class="shell hidden" id="task-discovery" aria-labelledby="task-title">
+        <nav class="topbar"><div class="topbar-left"><strong class="wordmark home-logo" role="button" tabindex="0">gyro<span>.</span></strong><button type="button" class="home-button" aria-label="홈으로">🏠</button></div><button class="text-button" id="task-back">← 처음으로</button></nav>
+        <div class="narrow">
+          <p class="eyebrow">해결하고 싶은 일을 골라주세요</p>
+          <h2 id="task-title">작업에 맞는<br /><em>도구를 찾아요.</em></h2>
+          <p class="lede">웹서비스, 스킬, MCP를 같은 카드로 비교할 수 있어요. 연결은 직접 확인하고 진행하세요.</p>
+          <div class="choice-grid" id="task-choices" role="group" aria-label="작업 선택"></div>
+          <p class="form-status" id="task-status" role="status" aria-live="polite"></p>
         </div>
       </section>
 
@@ -98,8 +110,16 @@
       <div class="preview-overlay hidden" id="preview-overlay" role="dialog" aria-modal="true" aria-label="서비스 미리보기">
         <div class="preview-bar">
           <span class="preview-title" id="preview-title"></span>
-          <a class="preview-open-new" id="preview-open-new" target="_blank" rel="noreferrer">새 탭에서 열기 ↗</a>
+          <a class="preview-open-new" id="preview-open-new" target="_blank" rel="noopener noreferrer">새 탭에서 열기 ↗</a>
           <button class="preview-close" id="preview-close" aria-label="미리보기 닫기">×</button>
+        </div>
+        <div class="guide-overlay hidden" id="guide-overlay" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+          <div class="guide-panel">
+            <header class="guide-header"><h2 id="guide-title"></h2><button class="preview-close" id="guide-close" aria-label="연결 가이드 닫기">×</button></header>
+            <div class="guide-content" id="guide-content"></div>
+            <div class="guide-report" id="guide-report"></div>
+            <button class="text-button" id="guide-skip">건너뛰고 닫기</button>
+          </div>
         </div>
         <div class="preview-article">
           <h2 class="preview-article-title" id="preview-article-title"></h2>
