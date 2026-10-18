@@ -1,4 +1,5 @@
 import type { CatalogService } from '../catalog.js';
+import { createCuratedServices } from './catalog-entry.js';
 
 export const datingCatalog: CatalogService[] = [
   {
@@ -849,4 +850,26 @@ export const datingCatalog: CatalogService[] = [
     "number": "38",
     "tier": "emerging"
   },
+  ...createCuratedServices('dating', '연애', 39, 'emerging', [
+    { name: 'Boo', serviceUrl: 'https://boo.world', tagline: '성격 유형과 공통 관심사로 친구와 연인을 찾는 앱', description: '성격 검사와 관심사 프로필을 바탕으로 대화가 잘 맞는 사람을 발견하는 소셜 데이팅 서비스다. 친구 찾기와 커뮤니티 기능도 함께 제공한다.', tags: ['매칭', '커뮤니티'] },
+    { name: 'PURE', serviceUrl: 'https://pure.app', tagline: '원하는 만남과 대화 조건을 먼저 정하는 데이팅 앱', description: '이용자가 원하는 만남의 종류와 시간대를 명확히 설정하고, 서로의 의사가 맞는 경우 연결되는 데이팅 플랫폼이다.', tags: ['매칭', '소개팅'] },
+    { name: 'happn', serviceUrl: 'https://www.happn.com', tagline: '일상에서 같은 장소를 지나친 사람을 발견하는 앱', description: '위치 기반으로 일상 동선이 겹친 이용자를 보여주고, 서로 관심을 표현했을 때 대화를 시작할 수 있도록 연결한다.', tags: ['매칭', '본인인증'] },
+    { name: 'Fruitz', serviceUrl: 'https://fruitz.io', tagline: '프로필의 과일 선택으로 만남의 기대를 미리 공유하는 앱', description: '이용자가 원하는 관계의 성격을 과일 아이콘으로 표현하고, 같은 기대를 가진 상대를 찾아 대화를 시작하는 데이팅 앱이다.', tags: ['매칭', '소개팅'] },
+    { name: 'Turn Up', serviceUrl: 'https://www.turn-up.app', tagline: '좋아하는 음악과 공연 취향으로 사람을 연결하는 앱', description: '음악 취향과 공연 정보를 프로필에 담아 공통 취향을 가진 사람을 발견하고 대화하도록 돕는 소셜 데이팅 서비스다.', tags: ['매칭', '커뮤니티'] },
+    { name: 'Kippo', serviceUrl: 'https://kippoapp.com', tagline: '게임 취향과 아바타로 게이머의 만남을 돕는 앱', description: '게임 프로필과 아바타를 꾸며 공통 게임을 즐기는 사람을 찾고, 함께 플레이하며 관계를 만들어가는 데이팅 플랫폼이다.', tags: ['매칭', '커뮤니티'] },
+    { name: 'Muzz', serviceUrl: 'https://muzz.com', tagline: '무슬림 이용자의 가치관과 결혼 목표를 고려한 매칭 앱', description: '무슬림 커뮤니티의 문화와 관계 목표에 맞춘 프로필, 매칭, 대화 기능을 제공하는 글로벌 데이팅 서비스다.', tags: ['매칭', '본인인증'] },
+    { name: 'Taimi', serviceUrl: 'https://taimi.com', tagline: 'LGBTQ+ 커뮤니티의 데이팅과 소셜 교류를 잇는 플랫폼', description: 'LGBTQ+ 이용자를 위한 데이팅과 소셜 네트워크 기능을 함께 제공한다. 프로필, 관심사 피드, 커뮤니티를 통해 새로운 사람과 연결된다.', tags: ['매칭', '커뮤니티'] },
+    { name: 'Lex', serviceUrl: 'https://lex.lgbt', tagline: '퀴어 커뮤니티의 글과 개인 광고를 중심으로 연결하는 앱', description: '사진 중심 프로필 대신 글과 관심사로 사람을 발견하는 퀴어 소셜·데이팅 플랫폼이다. 게시물과 지역 커뮤니티를 통해 대화를 시작할 수 있다.', tags: ['커뮤니티', '매칭'] },
+    { name: '3Fun', serviceUrl: 'https://3funapp.com', tagline: '다양한 관계 형태를 위한 성인 데이팅 커뮤니티', description: '이용자가 관계 선호와 경계를 프로필에 표시하고, 상호 동의에 기반해 새로운 사람이나 커플을 찾을 수 있도록 돕는 데이팅 서비스다.', tags: ['매칭', '본인인증'] },
+    { name: 'Inner Circle', serviceUrl: 'https://www.theinnercircle.co', tagline: '프로필 검토와 오프라인 이벤트를 함께 제공하는 커뮤니티', description: '프로필 심사와 관심사 기반 매칭을 결합해 진지한 만남을 찾는 이용자를 연결한다. 도시별 이벤트를 통해 온라인 밖에서도 만날 수 있다.', tags: ['매칭', '소개팅'] },
+    { name: 'LOVOO', serviceUrl: 'https://www.lovoo.com', tagline: '주변 사람과 라이브 기능으로 대화를 시작하는 데이팅 앱', description: '위치 기반 사람 찾기, 관심 표현, 라이브 스트리밍을 통해 새로운 연결을 만드는 소셜 데이팅 서비스다.', tags: ['매칭', '커뮤니티'] },
+    { name: 'Jaumo', serviceUrl: 'https://www.jaumo.com', tagline: '관심사와 지역을 바탕으로 새 사람을 만나는 앱', description: '지역 기반 검색과 프로필 추천으로 새로운 사람을 발견하고, 채팅을 통해 관계를 이어가는 데이팅 플랫폼이다.', tags: ['매칭', '소개팅'] },
+    { name: 'DOWN', serviceUrl: 'https://www.downapp.com', tagline: '관계의 기대를 서로 분명히 표현하도록 돕는 매칭 앱', description: '이용자가 상대와 원하는 관계 방향을 선택하고, 관심이 상호 확인된 경우 대화를 시작하는 소셜 데이팅 앱이다.', tags: ['매칭', '본인인증'] },
+    { name: 'Hily', serviceUrl: 'https://hily.com', tagline: '프로필과 대화형 콘텐츠로 잘 맞는 상대를 찾는 앱', description: '관심사, 프로필 정보와 대화 시작 질문을 활용해 이용자가 서로를 발견하고 연결되도록 돕는 데이팅 플랫폼이다.', tags: ['매칭', '소개팅'] },
+    { name: 'BLK', serviceUrl: 'https://blk-app.com', tagline: '흑인 싱글 커뮤니티를 위한 데이팅과 소셜 연결 앱', description: '흑인 싱글을 중심으로 프로필 추천, 관심 표현, 채팅 기능을 제공하며 커뮤니티 안에서 새로운 만남을 지원한다.', tags: ['매칭', '커뮤니티'] },
+    { name: 'Ur My Type', serviceUrl: 'https://urmtype.app', tagline: '성격 유형과 대화 취향을 바탕으로 연결하는 데이팅 앱', description: '성격 유형과 관심 주제를 프로필에 담고, 대화 취향이 맞는 사람을 발견해 채팅을 시작하도록 돕는 소셜 매칭 서비스다.', tags: ['매칭', '소개팅'] },
+    { name: 'Amori', serviceUrl: 'https://amori.app', tagline: '대화와 가치관을 중심으로 천천히 알아가는 매칭 앱', description: '프로필 사진보다 대화 질문과 관심사 공유를 통해 상대를 알아가도록 구성된 소셜 데이팅 서비스다.', tags: ['매칭', '커뮤니티'] },
+    { name: 'Rivet', serviceUrl: 'https://www.joinrivet.com', tagline: '친구의 추천과 관점을 더해 함께 상대를 발견하는 매칭 앱', description: '친구가 서로의 만남을 돕는 소셜 매칭 서비스다. 친구의 추천과 대화를 매칭 과정에 더해 새로운 상대를 발견하고 관계를 시작하도록 돕는다.', tags: ['매칭', '커뮤니티'] },
+    { name: 'Plura', serviceUrl: 'https://www.plura.app', tagline: '다양한 관계 형태와 커뮤니티 이벤트를 연결하는 데이팅 앱', description: '비독점 관계와 퀴어 커뮤니티를 포함해 다양한 관계 형태를 존중하는 소셜 데이팅 플랫폼이다. 프로필과 이벤트를 통해 서로 동의하는 사람을 발견하도록 돕는다.', tags: ['매칭', '커뮤니티'] },
+  ]),
 ];

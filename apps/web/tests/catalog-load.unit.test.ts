@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-// Regression coverage for the "발견 시작하기" race condition: clicking the
-// start button before the async /api/services fetch resolved left
-// `services` empty and stranded the cards screen at "0 / 0" forever.
+// The landing and questionnaire stay usable while the service catalog is
+// checked in the background; the final action remains guarded until cards exist.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -30,13 +29,13 @@ async function loadAppModule() {
   return import('../src/app.ts');
 }
 
-describe('web unit: catalog load race guard', () => {
+describe('web unit: background catalog loading', () => {
   beforeEach(() => {
     mountApp();
     vi.restoreAllMocks();
   });
 
-  it('disables the start button while the catalog is loading, then enables it on success', async () => {
+  it('opens the questionnaire immediately, then enables card discovery after the catalog arrives', async () => {
     let resolveServices: (value: Response) => void;
     const servicesPromise = new Promise<Response>((resolve) => { resolveServices = resolve; });
     vi.stubGlobal('fetch', vi.fn((url: string) => {
@@ -48,23 +47,24 @@ describe('web unit: catalog load race guard', () => {
     await loadAppModule();
     const startButton = document.getElementById('start-button') as HTMLButtonElement;
 
-    expect(startButton.disabled).toBe(true);
-    expect(startButton.textContent).toBe('불러오는 중...');
-
-    // Clicking while disabled must not navigate away from the landing screen.
+    expect(startButton.disabled).toBe(false);
     startButton.click();
-    expect(document.getElementById('landing')!.classList.contains('hidden')).toBe(false);
-    expect(document.getElementById('profile')!.classList.contains('hidden')).toBe(true);
+    expect(document.getElementById('landing')!.classList.contains('hidden')).toBe(true);
+    expect(document.getElementById('profile')!.classList.contains('hidden')).toBe(false);
+    expect((document.getElementById('profile-next') as HTMLButtonElement).disabled).toBe(true);
+    expect(document.getElementById('profile-status')!.textContent).toContain('확인하고 있어요');
 
     resolveServices!(new Response(JSON.stringify({ services: [sampleService] })));
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(startButton.disabled).toBe(false);
-    expect(startButton.textContent).toContain('바이브 벤처');
+    document.querySelector<HTMLButtonElement>('[data-audience="student"]')!.click();
+    document.querySelector<HTMLButtonElement>('[data-interest="학습"]')!.click();
+    expect((document.getElementById('profile-next') as HTMLButtonElement).disabled).toBe(false);
+    expect(document.getElementById('profile-status')!.textContent).toBe('');
   });
 
-  it('keeps the start button enabled-but-inert if the catalog fetch fails, instead of stalling cards at 0 / 0', async () => {
+  it('shows an explicit error and never advances to an empty card deck when loading fails', async () => {
     vi.stubGlobal('fetch', vi.fn((url: string) => {
       if (url.includes('config.json')) return Promise.resolve(new Response(JSON.stringify({ apiUrl: 'http://localhost:3001' })));
       if (url.includes('/api/services')) return Promise.reject(new Error('network down'));
@@ -77,11 +77,14 @@ describe('web unit: catalog load race guard', () => {
 
     const startButton = document.getElementById('start-button') as HTMLButtonElement;
     expect(startButton.disabled).toBe(false);
-    expect(startButton.textContent).toBe('서비스를 불러오지 못했어요');
-
-    // Clicking must be a no-op (guarded by `services.length === 0`), never
-    // advancing to the cards screen with an empty catalog.
     startButton.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(document.getElementById('profile-status')!.textContent).toContain('불러오지 못했어요');
+    document.querySelector<HTMLButtonElement>('[data-audience="student"]')!.click();
+    document.querySelector<HTMLButtonElement>('[data-interest="학습"]')!.click();
+    (document.getElementById('profile-next') as HTMLButtonElement).click();
     expect(document.getElementById('cards')!.classList.contains('hidden')).toBe(true);
     expect(document.getElementById('progress')!.textContent).toBe('0 / 0');
   });

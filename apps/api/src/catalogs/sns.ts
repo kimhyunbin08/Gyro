@@ -1,4 +1,5 @@
 import type { CatalogService } from '../catalog.js';
+import { createCuratedServices } from './catalog-entry.js';
 
 export const snsCatalog: CatalogService[] = [
   {
@@ -856,4 +857,26 @@ export const snsCatalog: CatalogService[] = [
     "number": "39",
     "tier": "emerging"
   },
+  ...createCuratedServices('sns', 'SNS', 40, 'emerging', [
+    { name: 'Pixelfed', serviceUrl: 'https://pixelfed.org', tagline: '광고와 알고리즘 대신 사진을 중심으로 연결되는 소셜 네트워크', description: '분산형 오픈소스 사진 공유 서비스다. 이용자가 원하는 서버를 선택해 계정을 만들고, 다른 서버의 사람들과도 사진과 이야기를 나눌 수 있다.', tags: ['콘텐츠공유', '커뮤니티'] },
+    { name: 'Lemmy', serviceUrl: 'https://join-lemmy.org', tagline: '주제별 커뮤니티를 직접 만들고 이어가는 분산형 포럼', description: '링크와 글을 올리고 댓글·투표로 토론하는 오픈소스 커뮤니티 플랫폼이다. 여러 독립 서버가 연결되는 구조로 관심사별 커뮤니티를 찾아 참여할 수 있다.', tags: ['커뮤니티', '소통'] },
+    { name: 'Substack Notes', serviceUrl: 'https://substack.com/notes', tagline: '뉴스레터 작가와 독자가 짧은 글로 대화하는 피드', description: 'Substack의 작가와 독자가 짧은 메모, 링크, 추천 글을 공유하고 답글을 주고받는 소셜 피드다. 뉴스레터 구독과 공개 대화를 함께 이어갈 수 있다.', tags: ['콘텐츠공유', '소통'] },
+    { name: 'Farcaster', serviceUrl: 'https://farcaster.xyz', tagline: '개방형 소셜 프로토콜을 기반으로 한 공개 대화 네트워크', description: '계정과 소셜 데이터를 앱 하나에 가두지 않는 개방형 프로토콜 기반 네트워크다. 글과 채널을 공유하고 여러 클라이언트에서 대화를 이어갈 수 있다.', tags: ['소통', '네트워킹'] },
+    { name: 'Nostr', serviceUrl: 'https://nostr.com', tagline: '중앙 운영자 없이 공개 키로 연결하는 개방형 소셜 프로토콜', description: '특정 회사의 서버가 아닌 릴레이 네트워크를 통해 게시물과 메시지를 주고받는 소셜 프로토콜이다. 여러 앱에서 같은 계정과 공개 피드를 사용할 수 있다.', tags: ['소통', '네트워킹'] },
+    { name: 'Damus', serviceUrl: 'https://damus.io', tagline: 'Nostr 네트워크에서 짧은 글과 대화를 나누는 소셜 앱', description: 'Nostr 프로토콜을 사용하는 소셜 클라이언트다. 공개 키 기반 계정으로 글을 게시하고 다른 클라이언트 이용자와 답글 및 반응을 주고받는다.', tags: ['소통', '콘텐츠공유'] },
+    { name: 'RedNote (샤오홍슈)', serviceUrl: 'https://www.xiaohongshu.com', tagline: '관심사와 취향을 사진·영상 리뷰로 나누는 라이프스타일 커뮤니티', description: '패션, 뷰티, 여행, 음식 등 생활 주제의 사진과 영상 후기를 공유하고 검색하는 소셜 플랫폼이다. 이용자 리뷰를 통해 취향과 장소를 발견할 수 있다.', tags: ['콘텐츠공유', '커뮤니티'] },
+    { name: 'Fanbase', serviceUrl: 'https://www.fanbase.app', tagline: '크리에이터가 공개 콘텐츠와 구독 커뮤니티를 함께 운영하는 플랫폼', description: '짧은 영상과 게시물을 공유하고 유료 구독 커뮤니티를 운영할 수 있는 크리에이터 중심 소셜 앱이다. 팬과 창작자가 콘텐츠를 매개로 직접 연결된다.', tags: ['콘텐츠공유', '커뮤니티'] },
+    { name: 'Locals', serviceUrl: 'https://locals.com', tagline: '크리에이터와 멤버가 구독 기반 커뮤니티를 만드는 공간', description: '크리에이터가 게시물, 라이브 방송, 멤버십을 한곳에서 운영하고 팬과 소통하도록 돕는 커뮤니티 서비스다.', tags: ['커뮤니티', '네트워킹'] },
+    { name: 'Partiful', serviceUrl: 'https://partiful.com', tagline: '초대장을 만들고 친구들과 모임을 준비하는 이벤트 소셜 앱', description: '온라인 초대장을 만들고 참석 여부와 모임 정보를 공유하는 이벤트 플랫폼이다. 초대받은 사람은 링크에서 친구를 초대하고 모임 전후로 소식을 나눌 수 있다.', tags: ['커뮤니티', '소통'] },
+    { name: 'Mighty Networks', serviceUrl: 'https://www.mightynetworks.com', tagline: '관심사와 멤버십을 중심으로 나만의 커뮤니티를 여는 플랫폼', description: '운영자가 커뮤니티, 온라인 강의, 이벤트, 멤버십을 한 공간에서 구성할 수 있도록 지원한다. 참여자는 주제별 피드와 모임에서 연결된다.', tags: ['커뮤니티', '네트워킹'] },
+    { name: 'Skool', serviceUrl: 'https://www.skool.com', tagline: '커뮤니티 대화와 학습 콘텐츠를 한곳에 모으는 플랫폼', description: '운영자가 회원 커뮤니티와 강의 콘텐츠를 만들고, 참여자는 게시물과 댓글로 서로 교류하며 학습 활동을 이어가는 서비스다.', tags: ['커뮤니티', '콘텐츠공유'] },
+    { name: 'Discourse', serviceUrl: 'https://www.discourse.org', tagline: '긴 대화와 지식 공유에 초점을 둔 오픈소스 커뮤니티', description: '주제별 토론, 질문과 답변, 공지 기능을 제공하는 포럼형 커뮤니티 플랫폼이다. 조직과 관심사 모임이 자체 온라인 공간을 운영할 수 있다.', tags: ['커뮤니티', '소통'] },
+    { name: 'Misskey', serviceUrl: 'https://misskey-hub.net', tagline: '분산형 서버에서 게시물과 이모지로 소통하는 소셜 네트워크', description: '서버마다 개성 있는 기능과 커뮤니티를 운영하는 오픈소스 분산형 소셜 플랫폼이다. 이용자는 글과 이미지, 반응을 공유하고 다른 서버와 연결된다.', tags: ['소통', '콘텐츠공유'] },
+    { name: 'Diaspora', serviceUrl: 'https://diasporafoundation.org', tagline: '개인이 운영하는 팟을 선택해 참여하는 분산형 소셜 네트워크', description: '독립적으로 운영되는 팟들이 연결되는 오픈소스 소셜 네트워크다. 이용자는 원하는 운영 주체를 선택하고 게시물과 관심사를 공유한다.', tags: ['소통', '네트워킹'] },
+    { name: 'Friendica', serviceUrl: 'https://friendi.ca', tagline: '여러 분산형 소셜 네트워크와 연결되는 오픈소스 플랫폼', description: '자체 서버를 운영하거나 공개 서버에 가입해 글과 사진을 나눌 수 있는 분산형 소셜 서비스다. 다양한 연합 프로토콜과 연결해 다른 네트워크와 소통한다.', tags: ['네트워킹', '커뮤니티'] },
+    { name: 'PeerTube', serviceUrl: 'https://joinpeertube.org', tagline: '독립 서버와 함께 운영하는 분산형 동영상 공유 플랫폼', description: '각 커뮤니티가 직접 운영하는 서버에 영상을 올리고 서로 구독하는 오픈소스 동영상 네트워크다. 단일 플랫폼에 의존하지 않고 채널과 콘텐츠를 공유한다.', tags: ['콘텐츠공유', '커뮤니티'] },
+    { name: 'Lens', serviceUrl: 'https://lens.xyz', tagline: '소셜 프로필과 콘텐츠를 앱 사이에서 이어 쓰는 개방형 네트워크', description: '프로필과 소셜 관계를 여러 앱에서 활용하도록 설계된 개방형 소셜 네트워크다. 이용자는 게시물을 발행하고 서로 다른 클라이언트에서 콘텐츠를 발견한다.', tags: ['네트워킹', '콘텐츠공유'] },
+    { name: 'Vero', serviceUrl: 'https://vero.co', tagline: '시간순 피드와 관심사별 친구 그룹으로 콘텐츠를 나누는 앱', description: '사진, 음악, 영화, 링크 등을 광고 중심 추천 피드 대신 시간순으로 공유하는 소셜 앱이다. 친구를 관계 유형별로 구분해 게시물 공개 범위를 조절할 수 있다.', tags: ['콘텐츠공유', '소통'] },
+    { name: 'The StoryGraph', serviceUrl: 'https://thestorygraph.com', tagline: '독서 취향을 기록하고 책 추천과 독서 모임을 나누는 커뮤니티', description: '읽은 책과 독서 목표를 기록하고 취향 기반으로 다음 책을 발견하는 플랫폼이다. 독서 통계와 서평을 공유하며 친구와 함께 읽기 활동을 할 수 있다.', tags: ['커뮤니티', '콘텐츠공유'] },
+  ]),
 ];

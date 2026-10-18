@@ -1,7 +1,7 @@
 import './styles.css';
+import { createCatalogLoader, type CatalogService as Service, type CatalogShuffle as ShuffleId, type CatalogTier as ServiceTier } from './catalog-loader.js';
 
 type Audience = 'student' | 'teacher' | 'parent' | 'other';
-type Service = { id:string; name:string; tagline:string; description:string; imageUrl:string; serviceUrl:string; tags:string[]; audiences:Audience[] };
 // Runtime config is fetched (not baked into the JS bundle) so the public web
 // image stays environment-agnostic; config.json is written by the container
 // entrypoint at startup. Resolved via top-level await so nothing below runs
@@ -27,7 +27,7 @@ const sessionId = crypto.randomUUID();
 // Swiping through all ~98 services in one sitting is exhausting, so cards are
 // shown in rounds of BATCH_SIZE; each round ends on an interim results
 // screen that offers to continue with the next round.
-const BATCH_SIZE = 10;
+export const BATCH_SIZE = 10;
 // Recommendation weighting: each matched interest tag counts for
 // INTEREST_WEIGHT, the single selected audience/type match counts for
 // AUDIENCE_WEIGHT. Audience gets the heavier weight because it's one
@@ -53,14 +53,6 @@ let services: Service[] = [], index = 0, batchStart = 0, batchEnd = 0, liked: Se
 // swipe flow after every single dislike.
 let dislikedThisBatch: Service[] = [];
 let audience: Audience | null = null, interests = new Set<string>();
-// 셔플(shuffle): 질문→스와이프→결과 플로우를 공유하는 독립된 카탈로그 묶음.
-// 기존 대구 바이브벤처 프로그램 카탈로그는 'vibe-venture' 셔플로 취급되며
-// 기본값으로 유지된다. prd.md §9-4 참고.
-type ShuffleId = 'vibe-venture'|'sns'|'dating'|'productivity'|'game';
-// prd.md §9-4 #7: theme shuffles are split into mainstream ("주류") vs.
-// emerging ("비주류") services. Omitting `tier` entirely (the "둘 다" choice)
-// means "show both" — there is no third server-side value for it.
-type ServiceTier = 'mainstream'|'emerging';
 const SHUFFLE_LABELS: Record<ShuffleId,string> = {'vibe-venture':'바이브 벤처','sns':'SNS','dating':'연애','productivity':'생산성','game':'게임'};
 const SHUFFLE_TAGS: Record<ShuffleId,string[]> = {
   'vibe-venture':['학습','창작','생활','생산성','협업','AI'],
@@ -70,14 +62,28 @@ const SHUFFLE_TAGS: Record<ShuffleId,string[]> = {
   'game':['캐주얼','멀티플레이어','전략','커뮤니티'],
 };
 let currentShuffle: ShuffleId = 'vibe-venture';
-let defaultServices: Service[] = [];
+const catalogLoader = createCatalogLoader(API);
+let profileCatalogReady = false;
+let profileCatalogError = false;
+let profileLoadToken = 0;
 const $ = <T extends HTMLElement>(id:string) => document.getElementById(id) as T;
 const screens = ['landing','theme','tier','profile','cards','results','ranking'];
 function show(id:string){screens.forEach(x => $(x).classList.toggle('hidden', x !== id)); window.scrollTo({top:0,behavior:'smooth'});}
 function track(name:string, metadata:Record<string,unknown>={}){void fetch(`${API}/api/events`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,sessionId,metadata})}).catch(()=>{});}
 function startBatch(){ batchStart = index; batchEnd = Math.min(index + BATCH_SIZE, services.length); dislikedThisBatch = []; }
 function renderChoices(){const audiences:[Audience,string][]=[['student','학생이에요'],['teacher','선생님이에요'],['parent','학부모예요'],['other','그 외예요']];$('audience-choices').innerHTML=audiences.map(([id,label])=>`<button class="choice ${audience===id?'selected':''}" data-audience="${id}">${label}</button>`).join(''); document.querySelectorAll<HTMLElement>('[data-audience]').forEach(b=>b.onclick=()=>{audience=b.dataset.audience as Audience;renderChoices();checkProfile();}); const tags=SHUFFLE_TAGS[currentShuffle];$('interest-choices').innerHTML=tags.map(tag=>`<button class="tag ${interests.has(tag)?'selected':''}" data-interest="${tag}">${tag}</button>`).join('');document.querySelectorAll<HTMLElement>('[data-interest]').forEach(b=>b.onclick=()=>{const tag=b.dataset.interest!;interests.has(tag)?interests.delete(tag):interests.add(tag);renderChoices();checkProfile();});}
-function checkProfile(){ $('profile-next').toggleAttribute('disabled', !audience || interests.size===0); }
+function checkProfile(){
+  const next = $<HTMLButtonElement>('profile-next');
+  const status = $('profile-status');
+  next.disabled = !audience || interests.size === 0 || !profileCatalogReady || services.length === 0;
+  status.textContent = profileCatalogError
+    ? '서비스를 불러오지 못했어요. 홈으로 돌아가 다시 시도해 주세요.'
+    : !profileCatalogReady
+      ? '서비스 목록을 확인하고 있어요. 먼저 유형과 관심사를 골라보세요.'
+      : services.length === 0
+        ? '지금은 표시할 수 있는 서비스가 없어요. 잠시 후 다시 시도해 주세요.'
+        : '';
+}
 // Swipe tuning: drag distance past the threshold (or a fast flick) commits
 // the decision; released early, the card springs back to center.
 const SWIPE_COMMIT_PX = 110;
@@ -382,37 +388,34 @@ const startButtonDefaultText = startButton.textContent ?? '';
 // prd.md §9 item 6: an empty catalog (all exhibits currently unreachable) must show a
 // "preparing/try again" state instead of silently letting the user swipe
 // through zero cards into a misleading "all done" results screen.
-async function fetchShuffleServices(shuffle: ShuffleId, tier?: ServiceTier): Promise<Service[]> {
-  const params = new URLSearchParams({ shuffle });
-  if (tier) params.set('tier', tier);
-  const response = await fetch(`${API}/api/services?${params.toString()}`);
-  if (!response.ok) throw new Error('services');
-  const payload = await response.json();
-  return payload.services;
+const fetchShuffleServices = (shuffle: ShuffleId, tier?: ServiceTier): Promise<Service[]> => catalogLoader.getServices(shuffle, tier);
+// Keep the landing screen interactive while the service catalog warms in the
+// background. The questionnaire is available immediately; only its final
+// continue action waits until there are cards to show.
+startButton.disabled = false;
+startButton.textContent = startButtonDefaultText;
+function openProfile(shuffle: ShuffleId, tier?: ServiceTier) {
+  currentShuffle = shuffle;
+  audience = null; interests = new Set();
+  services = [];
+  profileCatalogReady = false;
+  profileCatalogError=false;
+  const requestToken = ++profileLoadToken;
+  show('profile');renderChoices();checkProfile();
+  void fetchShuffleServices(shuffle, tier).then(fetched => {
+    if (requestToken !== profileLoadToken || currentShuffle !== shuffle) return;
+    services = fetched;
+    profileCatalogReady = true;
+    track('landing_view', { shuffle, tier: tier ?? 'all' });
+    checkProfile();
+  }).catch(error => {
+    if (requestToken !== profileLoadToken || currentShuffle !== shuffle) return;
+    profileCatalogError = true;
+    console.error(`${shuffle} 카탈로그를 불러오지 못했습니다.`, error);
+    checkProfile();
+  });
 }
-async function load(){
-  try{
-    defaultServices = await fetchShuffleServices('vibe-venture');
-    services = defaultServices;
-    if(services.length===0){
-      startButton.disabled=false;
-      startButton.textContent='서비스를 준비 중이에요. 잠시 후 다시 시도해주세요';
-      return;
-    }
-    track('landing_view');
-    startButton.disabled=false;
-    startButton.textContent=startButtonDefaultText;
-  }catch{
-    services=[];
-    startButton.disabled=false;
-    startButton.textContent='서비스를 불러오지 못했어요';
-  }
-}
-// Fetching the catalog is async, so clicking "발견 시작하기" before it
-// resolves would leave `services` empty and strand the cards screen at
-// 0/0. Disable the button until the catalog is ready (or failed) instead.
-startButton.disabled=true;startButton.textContent='불러오는 중...';
-$('start-button').onclick=()=>{if(defaultServices.length===0)return;currentShuffle='vibe-venture';services=defaultServices;audience=null;interests=new Set();show('profile');renderChoices();checkProfile();};
+$('start-button').onclick=()=>openProfile('vibe-venture');
 const themeEntryButton = $<HTMLButtonElement>('theme-entry-button');
 const THEME_IDS: Exclude<ShuffleId,'vibe-venture'>[] = ['sns','dating','productivity','game'];
 let pendingThemeShuffle: Exclude<ShuffleId,'vibe-venture'> | null = null;
@@ -428,6 +431,7 @@ function selectTheme(shuffle: Exclude<ShuffleId,'vibe-venture'>){
   pendingThemeShuffle = shuffle;
   renderTierChoices();
   show('tier');
+  void catalogLoader.preloadTheme(shuffle).catch(error => console.warn(`${shuffle} 카탈로그 사전 로드 실패`, error));
 }
 const TIER_CHOICES: { tier?: ServiceTier; label: string }[] = [
   { tier: 'mainstream', label: '주류 서비스' },
@@ -436,36 +440,21 @@ const TIER_CHOICES: { tier?: ServiceTier; label: string }[] = [
 ];
 function renderTierChoices(){
   $('tier-choices').innerHTML = TIER_CHOICES.map((t,i) => `<button class="choice${t.tier===undefined?' recommended':''}" data-tier-index="${i}">${t.label}</button>`).join('');
-  document.querySelectorAll<HTMLButtonElement>('[data-tier-index]').forEach(b => b.onclick = () => selectTier(TIER_CHOICES[Number(b.dataset.tierIndex)].tier, b));
+  document.querySelectorAll<HTMLButtonElement>('[data-tier-index]').forEach(b => b.onclick = () => selectTier(TIER_CHOICES[Number(b.dataset.tierIndex)].tier));
 }
-async function selectTier(tier: ServiceTier | undefined, button: HTMLButtonElement){
+function selectTier(tier: ServiceTier | undefined){
   if(!pendingThemeShuffle) return;
-  const shuffle = pendingThemeShuffle;
-  const original = button.textContent;
-  button.disabled = true; button.textContent = '불러오는 중...';
-  try{
-    const fetched = await fetchShuffleServices(shuffle, tier);
-    if(fetched.length===0){
-      button.textContent = '서비스를 준비 중이에요';
-      setTimeout(()=>{button.disabled=false;button.textContent=original;}, 1500);
-      return;
-    }
-    currentShuffle = shuffle;
-    services = fetched;
-    audience = null; interests = new Set();
-    track('landing_view', { shuffle, tier: tier ?? 'all' });
-    show('profile'); renderChoices(); checkProfile();
-  }catch{
-    button.textContent = '불러오지 못했어요';
-    setTimeout(()=>{button.disabled=false;button.textContent=original;}, 1500);
-  }
+  openProfile(pendingThemeShuffle, tier);
 }
-themeEntryButton.onclick = () => { renderThemeChoices(); show('theme'); };
+themeEntryButton.onclick = () => {
+  renderThemeChoices();
+  show('theme');
+};
 // Shared "go back to the very start" action: the logo and home button on
 // every non-landing screen, plus the results screen's "처음부터 다시 보기"
 // button, all reset in-progress round state and return to landing. This is
 // always a manual, user-triggered navigation (never automatic).
-function goHome(){index=0;batchStart=0;batchEnd=0;liked=[];dislikedThisBatch=[];history=[];audience=null;interests.clear();pendingThemeShuffle=null;show('landing');}
+function goHome(){profileLoadToken++;index=0;batchStart=0;batchEnd=0;liked=[];dislikedThisBatch=[];history=[];audience=null;interests.clear();pendingThemeShuffle=null;show('landing');}
 $('theme-back').onclick = goHome;
 $('tier-back').onclick = () => { renderThemeChoices(); show('theme'); };
 document.querySelectorAll<HTMLElement>('.home-logo').forEach(el=>{
@@ -473,7 +462,7 @@ document.querySelectorAll<HTMLElement>('.home-logo').forEach(el=>{
   el.addEventListener('keydown', e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();goHome();}});
 });
 document.querySelectorAll<HTMLButtonElement>('.home-button').forEach(el=>el.onclick=goHome);
-$('profile-next').onclick=()=>{services=[...services].sort((a,b)=>matchScore(b,audience,interests)-matchScore(a,audience,interests));track('profile_submit',{audience,interests:[...interests],shuffle:currentShuffle});startBatch();show('cards');renderCard();};
+$('profile-next').onclick=()=>{if(!profileCatalogReady||services.length===0)return;services=[...services].sort((a,b)=>matchScore(b,audience,interests)-matchScore(a,audience,interests));track('profile_submit',{audience,interests:[...interests],shuffle:currentShuffle});startBatch();show('cards');renderCard();};
 function triggerDecision(action:'like'|'dislike'){ if(index>=batchEnd)return; const card=$('swipe-stage').querySelector<HTMLElement>('.service-card'); if(card) flyOutCard(card, action, () => decide(action)); else decide(action); }
 $('like-button').onclick=()=>triggerDecision('like');$('reject-button').onclick=()=>triggerDecision('dislike');$('undo-button').onclick=undo;$('swipe-stage').onkeydown=e=>{if(e.key==='ArrowRight')triggerDecision('like');if(e.key==='ArrowLeft')triggerDecision('dislike');if(e.key.toLowerCase()==='u')undo();};
 $('continue-button').onclick=()=>{startBatch();show('cards');renderCard();};
@@ -486,4 +475,3 @@ $('retry-intent-skip').onclick=closePreview;
 $('ranking-link-landing').onclick=()=>openRanking('landing');
 $('ranking-link-results').onclick=()=>openRanking('results');
 $('ranking-back').onclick=closeRanking;
-void load();
