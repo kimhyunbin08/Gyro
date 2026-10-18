@@ -1,5 +1,5 @@
 import './styles.css';
-import { createCatalogLoader, type CatalogService as Service, type CatalogShuffle as ShuffleId, type CatalogTier as ServiceTier } from './catalog-loader.js';
+import { createCatalogLoader, type CatalogService as Service, type CatalogKind, type CatalogShuffle as ShuffleId, type CatalogTier as ServiceTier } from './catalog-loader.js';
 
 type Audience = 'student' | 'teacher' | 'parent' | 'other';
 // Runtime config is fetched (not baked into the JS bundle) so the public web
@@ -41,10 +41,11 @@ export const AUDIENCE_WEIGHT = 3;
 export function matchedInterestTags(service: Service, interests: ReadonlySet<string>): string[] {
   return service.tags.filter((t) => interests.has(t));
 }
-export function matchScore(service: Service, audience: Audience | null, interests: ReadonlySet<string>): number {
+export function matchScore(service: Service, audience: Audience | null, interests: ReadonlySet<string>, taskId?: string | null): number {
   const matchedTags = matchedInterestTags(service, interests).length;
   const audienceMatch = audience !== null && service.audiences.includes(audience);
-  return matchedTags * INTEREST_WEIGHT + (audienceMatch ? AUDIENCE_WEIGHT : 0);
+  const taskMatch = taskId !== undefined && taskId !== null && service.tasks?.includes(taskId);
+  return (matchedTags + (taskMatch ? 1 : 0)) * INTEREST_WEIGHT + (audienceMatch ? AUDIENCE_WEIGHT : 0);
 }
 let services: Service[] = [], index = 0, batchStart = 0, batchEnd = 0, liked: Service[] = [], history: Array<{service:Service; action:'like'|'dislike'|'skip'}> = [];
 // prd.md §14.3 / trd.md §10.1 (Phase 2 draft): services disliked in the
@@ -53,13 +54,30 @@ let services: Service[] = [], index = 0, batchStart = 0, batchEnd = 0, liked: Se
 // swipe flow after every single dislike.
 let dislikedThisBatch: Service[] = [];
 let audience: Audience | null = null, interests = new Set<string>();
-const SHUFFLE_LABELS: Record<ShuffleId,string> = {'vibe-venture':'바이브 벤처','sns':'SNS','dating':'연애','productivity':'생산성','game':'게임'};
+let selectedTask: string | null = null;
+const SHUFFLE_LABELS: Record<ShuffleId,string> = {'vibe-venture':'바이브 벤처','sns':'SNS','dating':'연애','productivity':'생산성','game':'게임','task':'작업으로 찾기'};
+const TASK_OPTIONS = [
+  ['report-automation', '반복 보고서 자동화'],
+  ['document-writing', '문서 작성·정리'],
+  ['team-collaboration', '팀 협업·공유'],
+  ['customer-support', '고객 문의 응대'],
+  ['workflow-automation', '반복 업무 자동화'],
+  ['code-review', '코드 검토·테스트'],
+  ['meeting-notes', '회의·일정 정리'],
+  ['data-analysis', '데이터 분석'],
+  ['presentation-design', '발표 자료 만들기'],
+  ['content-creation', '콘텐츠 제작'],
+  ['ui-design', '화면 설계'],
+  ['payment-processing', '온라인 결제 받기'],
+] as const;
+const TASK_LABELS = new Map<string, string>(TASK_OPTIONS);
 const SHUFFLE_TAGS: Record<ShuffleId,string[]> = {
   'vibe-venture':['학습','창작','생활','생산성','협업','AI'],
   'sns':['소통','커뮤니티','콘텐츠공유','네트워킹'],
   'dating':['매칭','소개팅','커뮤니티','본인인증'],
   'productivity':['업무관리','메모·노트','자동화','협업'],
   'game':['캐주얼','멀티플레이어','전략','커뮤니티'],
+  'task':[],
 };
 let currentShuffle: ShuffleId = 'vibe-venture';
 const catalogLoader = createCatalogLoader(API);
@@ -67,7 +85,7 @@ let profileCatalogReady = false;
 let profileCatalogError = false;
 let profileLoadToken = 0;
 const $ = <T extends HTMLElement>(id:string) => document.getElementById(id) as T;
-const screens = ['landing','theme','tier','profile','cards','results','ranking'];
+const screens = ['landing','theme','tier','task-discovery','profile','cards','results','ranking'];
 function show(id:string){screens.forEach(x => $(x).classList.toggle('hidden', x !== id)); window.scrollTo({top:0,behavior:'smooth'});}
 function track(name:string, metadata:Record<string,unknown>={}){void fetch(`${API}/api/events`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,sessionId,metadata})}).catch(()=>{});}
 function startBatch(){ batchStart = index; batchEnd = Math.min(index + BATCH_SIZE, services.length); dislikedThisBatch = []; }
@@ -169,11 +187,25 @@ function bindWheelGestures(card:HTMLElement){
 // prd.md §8/§9 item 8: every card shows at least one explainable reason, derived
 // from the same tag/audience overlap used to rank the deck in profile-next.
 function recommendationReason(service: Service): string {
+  if (selectedTask && service.tasks?.includes(selectedTask)) return `"${TASK_LABELS.get(selectedTask) ?? '선택한 작업'}"을 도와요`;
   const matchedTags = matchedInterestTags(service, interests);
   const audienceMatch = audience && service.audiences.includes(audience);
   if (matchedTags.length > 0) return `"${matchedTags[0]}" 관심사와 잘 맞아요`;
   if (audienceMatch) return '선택하신 유형에게 인기 있어요';
   return '지금 둘러보기 좋은 서비스예요';
+}
+function kindLabel(kind: CatalogKind | undefined): string {
+  return ({ product: '제품', service: '서비스', skill: '스킬', mcp: 'MCP' })[kind ?? 'service'];
+}
+function verificationLabel(service: Service): string {
+  const level = service.verification?.level ?? 'link';
+  const label = ({ link: '링크 확인', docs: '문서 확인', install: '설치 검증' } as const)[level];
+  const verifiedAt = service.verification?.verifiedAt ?? (level === 'link' ? service.health?.checkedAt.slice(0, 10) : undefined);
+  const environment = level === 'install' ? ` · ${service.verification?.environment ?? '환경 미기록'}` : '';
+  return `${label} · ${verifiedAt ?? '검증일 미기록'}${environment}`;
+}
+function isGuideService(service: Service): boolean {
+  return service.kind === 'skill' || service.kind === 'mcp';
 }
 function renderCard(){
   if (index >= batchEnd) { finishBatch(); return; }
@@ -186,12 +218,14 @@ function renderCard(){
   // given visitor/network. Start from a safe gradient fallback and only
   // switch to the real screenshot once it has actually finished loading, so
   // a failed/slow fetch never leaves the full-screen card looking dead/black.
-  stage.innerHTML = `<article class="service-card image-fallback"><span class="service-card-initial" aria-hidden="true">${service.name.charAt(0)}</span><span class="swipe-stamp like" aria-hidden="true">관심 있음</span><span class="swipe-stamp nope" aria-hidden="true">관심 없음</span><div class="service-copy"><div class="service-tags">${service.tags.map(t=>`<span>${t}</span>`).join('')}</div><h3>${service.name}</h3><p>${service.tagline}</p><p class="service-reason">✨ ${recommendationReason(service)}</p><button class="preview-button" type="button" data-preview>미리보기 ⤢</button></div></article>`;
+  stage.innerHTML = `<article class="service-card image-fallback"><span class="service-card-initial" aria-hidden="true">${service.name.charAt(0)}</span><span class="swipe-stamp like" aria-hidden="true">관심 있음</span><span class="swipe-stamp nope" aria-hidden="true">관심 없음</span><div class="service-copy"><div class="service-tags"><span class="kind-badge">${kindLabel(service.kind)}</span><span class="verification-badge">${verificationLabel(service)}</span>${service.tags.map(t=>`<span>${t}</span>`).join('')}</div><h3>${service.name}</h3><p>${service.tagline}</p><p class="service-reason">✨ ${recommendationReason(service)}</p><button class="preview-button" type="button" ${isGuideService(service)?'data-guide':'data-preview'}>${isGuideService(service)?'연결 가이드':'미리보기 ⤢'}</button></div></article>`;
   const card = stage.querySelector<HTMLElement>('.service-card')!;
-  const preload = new Image();
-  preload.onload = () => { card.style.backgroundImage = `url('${resolveImageUrl(service.imageUrl)}')`; card.classList.remove('image-fallback'); };
-  preload.src = resolveImageUrl(service.imageUrl);
-  card.querySelector<HTMLButtonElement>('[data-preview]')!.onclick = (e) => { e.stopPropagation(); openPreview(service); };
+  if (service.imageUrl) {
+    const preload = new Image();
+    preload.onload = () => { card.style.backgroundImage = `url('${resolveImageUrl(service.imageUrl)}')`; card.classList.remove('image-fallback'); };
+    preload.src = resolveImageUrl(service.imageUrl);
+  }
+  card.querySelector<HTMLButtonElement>('[data-preview], [data-guide]')!.onclick = (e) => { e.stopPropagation(); isGuideService(service) ? openGuide(service) : openPreview(service); };
   bindCardGestures(card);
   bindWheelGestures(card);
 }
@@ -263,11 +297,15 @@ function finishBatch(){
   const remaining = services.length - index;
   track('result_view',{likedCount:liked.length,remaining});
   show('results');
-  $('result-list').innerHTML=liked.length?liked.map(s=>`<article class="result-item"><div class="result-main"><img src="${resolveImageUrl(s.imageUrl)}" alt=""><div><h3>${s.name}</h3><p>${s.tagline}</p><div class="result-links"><a href="${s.serviceUrl}" target="_blank" rel="noreferrer" data-service="${s.id}">서비스 열어보기 →</a><button class="result-preview-button" type="button" data-preview-result="${s.id}">미리보기</button></div></div></div>${feedbackWidgetHtml(s.id)}</article>`).join(''):'<p class="lede">아직 관심 표시한 서비스가 없어요. 다시 둘러보며 새로운 가능성을 찾아보세요.</p>';
+  $('result-list').innerHTML=liked.length?liked.map(s=>`<article class="result-item"><div class="result-main">${s.imageUrl?`<img src="${resolveImageUrl(s.imageUrl)}" alt="">`:''}<div><h3>${s.name}</h3><p>${s.tagline}</p><p class="result-reason">✨ ${recommendationReason(s)}</p><p class="result-verification">${kindLabel(s.kind)} · ${verificationLabel(s)}</p><div class="result-links"><a href="${s.serviceUrl}" target="_blank" rel="noopener noreferrer" data-service="${s.id}">공식 페이지 열기 →</a><button class="result-preview-button" type="button" ${isGuideService(s)?`data-guide-result="${s.id}"`:`data-preview-result="${s.id}"`}>${isGuideService(s)?'연결 가이드':'미리보기'}</button></div></div></div>${feedbackWidgetHtml(s.id)}</article>`).join(''):'<p class="lede">아직 관심 표시한 서비스가 없어요. 다시 둘러보며 새로운 가능성을 찾아보세요.</p>';
   document.querySelectorAll<HTMLAnchorElement>('[data-service]').forEach(a=>a.onclick=()=>track('service_click',{serviceId:a.dataset.service}));
   document.querySelectorAll<HTMLButtonElement>('[data-preview-result]').forEach(b=>{
     const matched = liked.find(s=>s.id===b.dataset.previewResult);
     if (matched) b.onclick = () => openPreview(matched);
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-guide-result]').forEach(b=>{
+    const matched = liked.find(s=>s.id===b.dataset.guideResult);
+    if (matched) b.onclick = () => openGuide(matched);
   });
   bindFeedbackWidgets();
   $('dislike-reasons').innerHTML = dislikeReasonsHtml();
@@ -285,6 +323,140 @@ function finishBatch(){
     $('results-lede').textContent = '모든 서비스를 다 확인했어요. 관심 표시한 서비스를 바로 열어보고 쓸모를 발견해보세요.';
     continueButton.classList.add('hidden');
   }
+}
+function appendGuideText(parent: HTMLElement, label: string, value: string): void {
+  const section = document.createElement('section');
+  section.className = 'guide-section';
+  const heading = document.createElement('h3');
+  heading.textContent = label;
+  const text = document.createElement('p');
+  text.textContent = value || '확인 안 됨';
+  section.append(heading, text);
+  parent.append(section);
+}
+function appendGuideList(parent: HTMLElement, label: string, values: string[]): void {
+  const section = document.createElement('section');
+  section.className = 'guide-section';
+  const heading = document.createElement('h3');
+  heading.textContent = label;
+  const list = document.createElement('ol');
+  if (values.length) {
+    for (const value of values) {
+      const item = document.createElement('li');
+      item.textContent = value;
+      list.append(item);
+    }
+  } else {
+    const item = document.createElement('li');
+    item.textContent = '확인 안 됨';
+    list.append(item);
+  }
+  section.append(heading, list);
+  parent.append(section);
+}
+function externalLink(url: string, label: string): HTMLAnchorElement | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+    const link = document.createElement('a');
+    link.href = parsed.href;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = label;
+    return link;
+  } catch {
+    return null;
+  }
+}
+function openGuide(service: Service): void {
+  const guide = service.connection;
+  const content = $('guide-content');
+  const report = $('guide-report');
+  content.replaceChildren();
+  report.replaceChildren();
+  $('guide-title').textContent = `${service.name} 연결 가이드`;
+  if (!guide) {
+    appendGuideText(content, '연결 정보', '이 항목에는 아직 연결 가이드가 등록되지 않았어요.');
+  } else {
+    appendGuideText(content, '지원 에이전트 / 클라이언트', guide.agents.map(agent => `${agent.name}${agent.versionNote ? ` (${agent.versionNote})` : ''}`).join(', '));
+    appendGuideText(content, 'MCP 연결 방식', service.kind === 'mcp'
+      ? `전송: ${guide.transport ?? '확인 안 됨'} · 실행: ${guide.runtime ?? '확인 안 됨'} · 인증: ${guide.auth ?? '확인 안 됨'}`
+      : '해당 없음');
+    appendGuideList(content, '필요 권한·키', guide.permissions);
+    appendGuideList(content, '설치 단계', guide.installSteps);
+    appendGuideText(content, '사용 예시', guide.exampleUsage ?? '');
+    const docs = document.createElement('section');
+    docs.className = 'guide-section';
+    const heading = document.createElement('h3');
+    heading.textContent = '공식 문서';
+    const link = externalLink(guide.docsUrl, '문서 열기 ↗');
+    if (link) {
+      link.addEventListener('click', () => track('service_click', { serviceId: service.id, mode: 'guide' }));
+      docs.append(heading, link);
+    } else {
+      const text = document.createElement('p');
+      text.textContent = '문서 주소를 확인할 수 없습니다.';
+      docs.append(heading, text);
+    }
+    content.append(docs);
+  }
+
+  const title = document.createElement('p');
+  title.className = 'guide-report-title';
+  title.textContent = '직접 연결해 본 결과가 있나요? (선택)';
+  const outcomes: Array<{ value: 'success' | 'partial' | 'fail'; label: string }> = [
+    { value: 'success', label: '성공' }, { value: 'partial', label: '일부 성공' }, { value: 'fail', label: '실패' },
+  ];
+  const outcomeGroup = document.createElement('div');
+  outcomeGroup.className = 'reason-chips';
+  const reasonGroup = document.createElement('div');
+  reasonGroup.className = 'reason-chips hidden';
+  const reasonOptions = [
+    ['install_blocked', '설치가 막힘'], ['auth_issue', '인증 문제'], ['permission_issue', '권한 문제'],
+    ['incompatible', '호환되지 않음'], ['docs_outdated', '문서가 오래됨'], ['other', '기타'],
+  ] as const;
+  let selectedOutcome: 'success' | 'partial' | 'fail' | null = null;
+  let selectedReason: typeof reasonOptions[number][0] | undefined;
+  const updateSelection = () => {
+    outcomeGroup.querySelectorAll<HTMLButtonElement>('button').forEach(button => button.classList.toggle('selected', button.dataset.outcome === selectedOutcome));
+    reasonGroup.classList.toggle('hidden', selectedOutcome !== 'fail');
+    reasonGroup.querySelectorAll<HTMLButtonElement>('button').forEach(button => button.classList.toggle('selected', button.dataset.reason === selectedReason));
+  };
+  for (const outcome of outcomes) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'reason-chip';
+    button.textContent = outcome.label;
+    button.dataset.outcome = outcome.value;
+    button.onclick = () => { selectedOutcome = outcome.value; updateSelection(); };
+    outcomeGroup.append(button);
+  }
+  for (const [value, label] of reasonOptions) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'reason-chip';
+    button.textContent = label;
+    button.dataset.reason = value;
+    button.onclick = () => { selectedReason = value; updateSelection(); };
+    reasonGroup.append(button);
+  }
+  const submitButton = document.createElement('button');
+  submitButton.type = 'button';
+  submitButton.className = 'text-button guide-report-submit';
+  submitButton.textContent = '익명으로 결과 보내기';
+  submitButton.onclick = () => {
+    if (!selectedOutcome) return;
+    const metadata: Record<string, unknown> = { serviceId: service.id, outcome: selectedOutcome };
+    if (selectedReason) metadata.reason = selectedReason;
+    track('connection_report', metadata);
+    closeGuide();
+  };
+  report.append(title, outcomeGroup, reasonGroup, submitButton);
+  $('guide-overlay').classList.remove('hidden');
+  $('guide-close').focus();
+}
+function closeGuide(): void {
+  $('guide-overlay').classList.add('hidden');
 }
 // Embedded preview: many student sites block iframe embedding via
 // X-Frame-Options/CSP. We can't reliably detect that from JS (a blocked
@@ -389,6 +561,46 @@ const startButtonDefaultText = startButton.textContent ?? '';
 // "preparing/try again" state instead of silently letting the user swipe
 // through zero cards into a misleading "all done" results screen.
 const fetchShuffleServices = (shuffle: ShuffleId, tier?: ServiceTier): Promise<Service[]> => catalogLoader.getServices(shuffle, tier);
+let taskLoadToken = 0;
+function renderTaskChoices(): void {
+  $('task-choices').innerHTML = TASK_OPTIONS.map(([id, label]) => `<button class="choice" type="button" data-task="${id}">${label}</button>`).join('');
+  document.querySelectorAll<HTMLButtonElement>('[data-task]').forEach(button => {
+    button.onclick = () => { void startTaskSearch(button.dataset.task!); };
+  });
+}
+async function startTaskSearch(taskId: string): Promise<void> {
+  const token = ++taskLoadToken;
+  profileLoadToken++;
+  $('task-status').textContent = '작업에 맞는 서비스의 접속 상태를 확인하고 있어요...';
+  document.querySelectorAll<HTMLButtonElement>('[data-task]').forEach(button => { button.disabled = true; });
+  try {
+    const fetched = await catalogLoader.getTaskServices(taskId);
+    if (token !== taskLoadToken) return;
+    if (fetched.length === 0) {
+      $('task-status').textContent = '지금은 연결할 수 있는 항목이 없어요. 다른 작업을 고르거나 잠시 후 다시 시도해 주세요.';
+      return;
+    }
+    currentShuffle = 'task';
+    selectedTask = taskId;
+    audience = null;
+    interests = new Set();
+    liked = [];
+    history = [];
+    index = 0;
+    services = [...fetched].sort((a, b) => matchScore(b, null, interests, taskId) - matchScore(a, null, interests, taskId));
+    track('landing_view', { shuffle: 'task', task: taskId });
+    track('profile_submit', { shuffle: 'task', task: taskId });
+    startBatch();
+    show('cards');
+    renderCard();
+  } catch (error) {
+    if (token !== taskLoadToken) return;
+    console.error(`작업 카탈로그를 불러오지 못했습니다. (${taskId})`, error);
+    $('task-status').textContent = '서비스 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
+  } finally {
+    if (token === taskLoadToken) document.querySelectorAll<HTMLButtonElement>('[data-task]').forEach(button => { button.disabled = false; });
+  }
+}
 // Keep the landing screen interactive while the service catalog warms in the
 // background. The questionnaire is available immediately; only its final
 // continue action waits until there are cards to show.
@@ -450,12 +662,19 @@ themeEntryButton.onclick = () => {
   renderThemeChoices();
   show('theme');
 };
+const taskEntryButton = $<HTMLButtonElement>('task-entry-button');
+taskEntryButton.onclick = () => {
+  renderTaskChoices();
+  $('task-status').textContent = '';
+  show('task-discovery');
+};
 // Shared "go back to the very start" action: the logo and home button on
 // every non-landing screen, plus the results screen's "처음부터 다시 보기"
 // button, all reset in-progress round state and return to landing. This is
 // always a manual, user-triggered navigation (never automatic).
-function goHome(){profileLoadToken++;index=0;batchStart=0;batchEnd=0;liked=[];dislikedThisBatch=[];history=[];audience=null;interests.clear();pendingThemeShuffle=null;show('landing');}
+function goHome(){profileLoadToken++;taskLoadToken++;index=0;batchStart=0;batchEnd=0;liked=[];dislikedThisBatch=[];history=[];audience=null;interests.clear();selectedTask=null;pendingThemeShuffle=null;show('landing');}
 $('theme-back').onclick = goHome;
+$('task-back').onclick = goHome;
 $('tier-back').onclick = () => { renderThemeChoices(); show('theme'); };
 document.querySelectorAll<HTMLElement>('.home-logo').forEach(el=>{
   el.addEventListener('click', goHome);
@@ -469,7 +688,9 @@ $('continue-button').onclick=()=>{startBatch();show('cards');renderCard();};
 $('restart-button').onclick=goHome;
 $('email-form').onsubmit=async e=>{e.preventDefault();const message=$('email-message');try{const r=await fetch(`${API}/api/email-leads`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$<HTMLInputElement>('email').value,updatesOptIn:$<HTMLInputElement>('updates').checked})});const body=await r.json();if(!r.ok)throw new Error(body.message);message.textContent='결과를 저장했어요.';track('email_submit',{updatesOptIn:$<HTMLInputElement>('updates').checked});}catch(error){message.textContent=error instanceof Error?error.message:'저장에 실패했어요.';}};
 $('preview-close').onclick=requestClosePreview;
-document.addEventListener('keydown',e=>{if(e.key==='Escape')requestClosePreview();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('guide-overlay').classList.contains('hidden'))closeGuide();else requestClosePreview();}});
+$('guide-close').onclick=closeGuide;
+$('guide-skip').onclick=closeGuide;
 document.querySelectorAll<HTMLButtonElement>('[data-retry-intent]').forEach(b=>b.onclick=()=>answerRetryIntent(b.dataset.retryIntent as 'yes'|'no'|'unsure'));
 $('retry-intent-skip').onclick=closePreview;
 $('ranking-link-landing').onclick=()=>openRanking('landing');

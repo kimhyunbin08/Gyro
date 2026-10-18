@@ -4,6 +4,7 @@ import { catalog as liveCatalog } from './catalog.js';
 import { checkServiceHealth, resolveServiceUrl, startCatalogHealthMonitor } from './services/health-check.service.js';
 import { allShuffleServices, filterByTier, findServiceById, resolveShuffleCatalog } from './shuffles.js';
 import { getServiceImage } from './image-proxy.js';
+import { isTaskId } from './catalogs/task.js';
 
 type Audience = 'student' | 'teacher' | 'parent' | 'other';
 type EventName =
@@ -16,7 +17,8 @@ type EventName =
   | 'service_click'
   | 'result_view'
   | 'email_submit'
-  | 'service_feedback_submit';
+  | 'service_feedback_submit'
+  | 'connection_report';
 
 const RANKING_LIMIT = 20;
 
@@ -29,6 +31,19 @@ type Service = {
   serviceUrl: string;
   tags: string[];
   audiences: Audience[];
+  kind?: 'product' | 'service' | 'skill' | 'mcp';
+  tasks?: string[];
+  connection?: {
+    agents: { name: string; versionNote?: string }[];
+    transport?: 'stdio' | 'http' | 'sse';
+    runtime?: 'local' | 'remote';
+    auth?: 'none' | 'api_key' | 'oauth' | 'unknown';
+    permissions: string[];
+    installSteps: string[];
+    exampleUsage?: string;
+    docsUrl: string;
+  };
+  verification?: { level: 'link' | 'docs' | 'install'; verifiedAt?: string; environment?: string; sources: string[] };
   health: { status: 'healthy'; checkedAt: string };
 };
 
@@ -47,6 +62,7 @@ const eventSchema = z
       'result_view',
       'email_submit',
       'service_feedback_submit',
+      'connection_report',
     ]),
     sessionId: z.string().min(8).max(100),
     metadata: z.record(z.string(), z.unknown()).optional(),
@@ -54,8 +70,24 @@ const eventSchema = z
   // 결과 화면의 익명 별점+코멘트 피드백은 일반 퍼널 이벤트와 같은 경로(POST /api/events)로
   // 들어오지만, 추후 소유자용 피드백 집계가 가능하도록 metadata 형태를 별도 검증한다.
   .superRefine((data, ctx) => {
-    if (data.name !== 'service_feedback_submit') return;
     const metadata = data.metadata ?? {};
+    if (data.name === 'connection_report') {
+      if (typeof metadata.serviceId !== 'string' || metadata.serviceId.length === 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'serviceId가 필요합니다.', path: ['metadata', 'serviceId'] });
+      }
+      if (metadata.outcome !== 'success' && metadata.outcome !== 'partial' && metadata.outcome !== 'fail') {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'outcome 값이 올바르지 않습니다.', path: ['metadata', 'outcome'] });
+      }
+      const reasons = ['install_blocked', 'auth_issue', 'permission_issue', 'incompatible', 'docs_outdated', 'other'];
+      if (metadata.reason !== undefined && !reasons.includes(String(metadata.reason))) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'reason 값이 올바르지 않습니다.', path: ['metadata', 'reason'] });
+      }
+      if (metadata.agent !== undefined && (typeof metadata.agent !== 'string' || metadata.agent.length > 80)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'agent는 80자 이하 문자열이어야 합니다.', path: ['metadata', 'agent'] });
+      }
+      return;
+    }
+    if (data.name !== 'service_feedback_submit') return;
     if (typeof metadata.serviceId !== 'string' || metadata.serviceId.length === 0) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'serviceId가 필요합니다.', path: ['metadata', 'serviceId'] });
     }
@@ -91,8 +123,8 @@ function dedupeCatalog(services: typeof liveCatalog): typeof liveCatalog {
   });
 }
 
-// prd.md §9-4 / ideation.md §11: 랭킹·퍼널 집계는 셔플을 구분하지 않고 전체 서비스(바이브 벤처
-// + 테마 셔플들)를 대상으로 한다. 셔플 간 URL 중복도 동일한 dedupe 규칙으로 걸러낸다.
+// 랭킹·퍼널 집계는 셔플을 구분하지 않고 기존 카탈로그와 작업 카탈로그 전체를 대상으로 한다.
+// 셔플 간 URL 중복도 동일한 dedupe 규칙으로 걸러낸다.
 const dedupedAllShuffles = dedupeCatalog(allShuffleServices());
 
 function allowedOrigin(): string {
@@ -117,7 +149,14 @@ export function createApp() {
   });
 
   app.get('/api/services', async (req, res) => {
-    const source = dedupeCatalog(filterByTier(resolveShuffleCatalog(req.query.shuffle), req.query.tier));
+    const isTaskShuffle = req.query.shuffle === 'task';
+    const taskFilter = isTaskShuffle && isTaskId(req.query.task) ? req.query.task : undefined;
+    const kindFilter = isTaskShuffle && ['product', 'service', 'skill', 'mcp'].includes(String(req.query.kind))
+      ? String(req.query.kind)
+      : undefined;
+    const source = dedupeCatalog(filterByTier(resolveShuffleCatalog(req.query.shuffle), req.query.tier))
+      .filter((service) => !taskFilter || service.tasks?.includes(taskFilter))
+      .filter((service) => !kindFilter || (service.kind ?? 'service') === kindFilter);
     const checked = await Promise.all(
       source.map(async (service) => ({ service, health: await checkServiceHealth(service.serviceUrl) }))
     );
@@ -127,7 +166,7 @@ export function createApp() {
     // screenshot source showed a generic placeholder instead of real service imagery.
     const services = dedupeCatalog(checked
       .filter((c) => c.health.status === 'healthy')
-      .map((c) => ({ ...c.service, serviceUrl: c.health.resolvedUrl, imageUrl: `/api/service-image/${c.service.id}`, health: c.health })));
+      .map((c) => ({ ...c.service, serviceUrl: c.health.resolvedUrl, imageUrl: c.service.imageUrl ? `/api/service-image/${c.service.id}` : '', health: c.health })));
     res.json({ services });
   });
 
@@ -145,22 +184,21 @@ export function createApp() {
     res.send(data);
   });
 
-  // prd.md §14.3 / trd.md §10.1 (Phase 2 draft): aggregate per-service
-  // funnel drop-off for builders, purely from existing in-memory events —
-  // no new event names or schema changes. "Reacted" (like+dislike+skip)
-  // stands in for impressions since there is no separate card-view event.
+  // Aggregate per-service funnel metrics from anonymous in-memory events.
+  // "Reacted" (like+dislike+skip) stands in for impressions since there is
+  // no separate card-view event; connection reports and doc clicks stay separate.
   // Reason-tag, retry-intent, and dwell-bucket follow-up events carry
   // metadata.stage so they don't double-count the primary card_dislike /
   // preview-click events.
   app.get('/api/services/funnel', (_req, res) => {
     const stats = new Map<
       string,
-      { likes: number; dislikes: number; skips: number; previewClicks: number; dislikeReasons: Record<string, number>; retryIntent: { yes: number; no: number; unsure: number }; dwellBuckets: Record<string, number> }
+      { likes: number; dislikes: number; skips: number; previewClicks: number; docClicks: number; connection: { success: number; partial: number; fail: number; reasons: Record<string, number> }; dislikeReasons: Record<string, number>; retryIntent: { yes: number; no: number; unsure: number }; dwellBuckets: Record<string, number> }
     >();
     const entry = (serviceId: string) => {
       let s = stats.get(serviceId);
       if (!s) {
-        s = { likes: 0, dislikes: 0, skips: 0, previewClicks: 0, dislikeReasons: {}, retryIntent: { yes: 0, no: 0, unsure: 0 }, dwellBuckets: {} };
+        s = { likes: 0, dislikes: 0, skips: 0, previewClicks: 0, docClicks: 0, connection: { success: 0, partial: 0, fail: 0, reasons: {} }, dislikeReasons: {}, retryIntent: { yes: 0, no: 0, unsure: 0 }, dwellBuckets: {} };
         stats.set(serviceId, s);
       }
       return s;
@@ -168,7 +206,17 @@ export function createApp() {
     for (const event of events) {
       const serviceId = event.metadata.serviceId;
       if (typeof serviceId !== 'string') continue;
-      if (event.name === 'card_like') entry(serviceId).likes++;
+      if (event.name === 'connection_report') {
+        const outcome = event.metadata.outcome;
+        if (outcome === 'success' || outcome === 'partial' || outcome === 'fail') {
+          const s = entry(serviceId);
+          s.connection[outcome]++;
+          const reason = event.metadata.reason;
+          if (typeof reason === 'string') s.connection.reasons[reason] = (s.connection.reasons[reason] || 0) + 1;
+        }
+      } else if (event.name === 'service_click' && event.metadata.mode === 'guide') {
+        entry(serviceId).docClicks++;
+      } else if (event.name === 'card_like') entry(serviceId).likes++;
       else if (event.name === 'card_dislike') {
         if (event.metadata.stage === 'reason_tag') {
           const reason = event.metadata.reason;
@@ -206,12 +254,14 @@ export function createApp() {
           dislikes: s?.dislikes || 0,
           skips: s?.skips || 0,
           previewClicks: s?.previewClicks || 0,
+          docClicks: s?.docClicks || 0,
+          connection: s?.connection || { success: 0, partial: 0, fail: 0, reasons: {} },
           dislikeReasons: s?.dislikeReasons || {},
           retryIntent: s?.retryIntent || { yes: 0, no: 0, unsure: 0 },
           dwellBuckets: s?.dwellBuckets || {},
         };
       })
-      .filter((entry) => entry.impressions > 0 || entry.previewClicks > 0)
+      .filter((entry) => entry.impressions > 0 || entry.previewClicks > 0 || entry.docClicks > 0 || entry.connection.success + entry.connection.partial + entry.connection.fail > 0)
       .sort((a, b) => b.impressions - a.impressions);
     res.json({ funnel });
   });
@@ -239,7 +289,11 @@ export function createApp() {
   app.post('/api/events', (req, res) => {
     const parsed = eventSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: '이벤트 형식이 올바르지 않습니다.' });
-    events.push({ ...parsed.data, metadata: parsed.data.metadata || {}, createdAt: new Date().toISOString() });
+    const metadata = parsed.data.metadata || {};
+    const safeMetadata = parsed.data.name === 'connection_report'
+      ? Object.fromEntries(['serviceId', 'outcome', 'reason', 'agent'].filter((key) => metadata[key] !== undefined).map((key) => [key, metadata[key]]))
+      : metadata;
+    events.push({ ...parsed.data, metadata: safeMetadata, createdAt: new Date().toISOString() });
     if (events.length > 5000) events.splice(0, events.length - 5000);
     res.status(202).json({ accepted: true });
   });

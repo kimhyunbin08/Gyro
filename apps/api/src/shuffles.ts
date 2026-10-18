@@ -3,11 +3,12 @@ import { snsCatalog } from './catalogs/sns.js';
 import { datingCatalog } from './catalogs/dating.js';
 import { productivityCatalog } from './catalogs/productivity.js';
 import { gameCatalog } from './catalogs/game.js';
+import { taskCatalog } from './catalogs/task.js';
 
 // prd.md §9-4 / ideation.md §11: "셔플" = 독립된 질문→스와이프→결과 플로우를 구성하는 서비스
 // 카탈로그 묶음. 기존 유일한 셔플(대구광역시교육청 인공지능교육센터 바이브벤처 프로그램 참가
 // 서비스 묶음)이 'vibe-venture' 기본값이고, 나머지는 테마별로 실제 서비스를 큐레이션한 카탈로그다.
-export const SHUFFLE_IDS = ['vibe-venture', 'sns', 'dating', 'productivity', 'game'] as const;
+export const SHUFFLE_IDS = ['vibe-venture', 'sns', 'dating', 'productivity', 'game', 'task'] as const;
 export type ShuffleId = (typeof SHUFFLE_IDS)[number];
 export const DEFAULT_SHUFFLE: ShuffleId = 'vibe-venture';
 
@@ -17,6 +18,7 @@ export const catalogsByShuffle: Record<ShuffleId, CatalogService[]> = {
   dating: datingCatalog,
   productivity: productivityCatalog,
   game: gameCatalog,
+  task: taskCatalog,
 };
 
 export function isShuffleId(value: unknown): value is ShuffleId {

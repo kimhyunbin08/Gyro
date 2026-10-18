@@ -53,4 +53,20 @@ describe('createCatalogLoader', () => {
     await expect(loader.getServices('sns')).resolves.toHaveLength(1);
     expect(request).toHaveBeenCalledTimes(2);
   });
+
+  it('requests and caches task and kind filters independently', async () => {
+    const request = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ services: [mainstream] }))));
+    const loader = createCatalogLoader('https://api.example', request as unknown as typeof fetch);
+
+    await Promise.all([
+      loader.getTaskServices('report-automation'),
+      loader.getTaskServices('report-automation'),
+      loader.getTaskServices('report-automation', 'mcp'),
+    ]);
+
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(String(request.mock.calls[0][0])).toContain('shuffle=task');
+    expect(String(request.mock.calls[0][0])).toContain('task=report-automation');
+    expect(String(request.mock.calls[1][0])).toContain('kind=mcp');
+  });
 });

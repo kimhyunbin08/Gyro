@@ -1,7 +1,41 @@
 // `tier` only applies to theme shuffles (sns/dating/productivity/game): prd.md §9-4 #7's
 // mainstream/emerging split. It's optional because the vibe-venture catalog has no such
 // concept; absent entries are treated as 'mainstream' (see shuffles.ts#filterByTier).
-export type CatalogService = { id: string; name: string; tagline: string; description: string; imageUrl: string; serviceUrl: string; tags: string[]; audiences: ('student'|'teacher'|'parent'|'other')[]; room: string; roomKey: string; number: string; tier?: 'mainstream'|'emerging' };
+export type CatalogKind = 'product' | 'service' | 'skill' | 'mcp';
+export type ConnectionGuide = {
+  agents: { name: string; versionNote?: string }[];
+  transport?: 'stdio' | 'http' | 'sse';
+  runtime?: 'local' | 'remote';
+  auth?: 'none' | 'api_key' | 'oauth' | 'unknown';
+  permissions: string[];
+  installSteps: string[];
+  exampleUsage?: string;
+  docsUrl: string;
+};
+export type ServiceVerification = {
+  level: 'link' | 'docs' | 'install';
+  verifiedAt?: string;
+  environment?: string;
+  sources: string[];
+};
+export type CatalogService = {
+  id: string;
+  name: string;
+  tagline: string;
+  description: string;
+  imageUrl: string;
+  serviceUrl: string;
+  tags: string[];
+  audiences: ('student'|'teacher'|'parent'|'other')[];
+  room: string;
+  roomKey: string;
+  number: string;
+  tier?: 'mainstream'|'emerging';
+  kind?: CatalogKind;
+  tasks?: string[];
+  connection?: ConnectionGuide;
+  verification?: ServiceVerification;
+};
 
 export const catalog: CatalogService[] = [
   {

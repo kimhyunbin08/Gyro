@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/server.js';
 import { catalog } from '../src/catalog.js';
+import { CATALOG_TASK_ENTRY_COUNT, taskCatalog } from '../src/catalogs/task.js';
 
 describe('Gyro discovery API', () => {
   const app = createApp();
@@ -15,6 +16,43 @@ describe('Gyro discovery API', () => {
     // imageUrl must point at our own image-proxy route, not the catalog's raw
     // (often placeholder-prone) screenshot source — see trd.md §5.4.
     expect(response.body.services.every((service: { id: string; imageUrl: string }) => service.imageUrl === `/api/service-image/${service.id}`)).toBe(true);
+  });
+
+  it('exposes the curated task catalog with compatible optional fields and forgiving filters', async () => {
+    expect(CATALOG_TASK_ENTRY_COUNT).toBeGreaterThanOrEqual(20);
+    expect(CATALOG_TASK_ENTRY_COUNT).toBeLessThanOrEqual(30);
+    expect(new Set(taskCatalog.map((service) => service.serviceUrl)).size).toBe(taskCatalog.length);
+    for (const service of taskCatalog) {
+      expect(service.kind).toBeTruthy();
+      expect(service.tasks?.length).toBeGreaterThan(0);
+      expect(service.verification?.sources.length).toBeGreaterThan(0);
+      if (service.kind === 'skill' || service.kind === 'mcp') {
+        expect(service.connection?.docsUrl).toMatch(/^https?:\/\//);
+        expect(Array.isArray(service.connection?.agents)).toBe(true);
+        expect(Array.isArray(service.connection?.permissions)).toBe(true);
+        expect(Array.isArray(service.connection?.installSteps)).toBe(true);
+      }
+      if (service.verification?.level === 'docs' || service.verification?.level === 'install') {
+        expect(service.verification.verifiedAt).toBeTruthy();
+      }
+      if (service.verification?.level === 'install') expect(service.verification.environment).toBeTruthy();
+    }
+
+    const full = await request(app).get('/api/services?shuffle=task');
+    expect(full.status).toBe(200);
+    expect(full.body.services).toHaveLength(taskCatalog.length);
+    expect(full.body.services.every((service: { kind?: string; tasks?: string[]; verification?: unknown }) => service.kind && service.tasks?.length && service.verification)).toBe(true);
+    expect(full.body.services.find((service: { id: string }) => service.id === 'task-github')?.imageUrl).toBe('');
+
+    const filtered = await request(app).get('/api/services?shuffle=task&task=code-review&kind=mcp');
+    expect(filtered.status).toBe(200);
+    expect(filtered.body.services.length).toBeGreaterThan(0);
+    expect(filtered.body.services.every((service: { kind: string; tasks: string[] }) => service.kind === 'mcp' && service.tasks.includes('code-review'))).toBe(true);
+
+    const ignoredUnknownFilters = await request(app).get('/api/services?shuffle=task&task=unknown&kind=unknown');
+    expect(ignoredUnknownFilters.body.services).toHaveLength(full.body.services.length);
+    const legacy = await request(app).get('/api/services');
+    expect(legacy.body.services.every((service: { kind?: string }) => service.kind === undefined)).toBe(true);
   });
 
   describe('GET /api/service-image/:id', () => {
@@ -72,6 +110,40 @@ describe('Gyro discovery API', () => {
     expect(accepted.status).toBe(202);
     const rejected = await request(app).post('/api/events').send({ name: 'unknown', sessionId: 'short' });
     expect(rejected.status).toBe(400);
+  });
+
+  it('validates and separately aggregates anonymous connection reports and guide document clicks', async () => {
+    const service = taskCatalog.find((entry) => entry.kind === 'mcp')!;
+    const sessionId = 'session-connection-1';
+    const success = await request(app).post('/api/events').send({
+      name: 'connection_report',
+      sessionId,
+      metadata: { serviceId: service.id, outcome: 'success', accessToken: 'must-not-be-retained', settings: 'secret' },
+    });
+    expect(success.status).toBe(202);
+    const failure = await request(app).post('/api/events').send({
+      name: 'connection_report',
+      sessionId,
+      metadata: { serviceId: service.id, outcome: 'fail', reason: 'auth_issue' },
+    });
+    expect(failure.status).toBe(202);
+    expect((await request(app).post('/api/events').send({
+      name: 'connection_report', sessionId, metadata: { serviceId: service.id, outcome: 'unknown' },
+    })).status).toBe(400);
+    expect((await request(app).post('/api/events').send({
+      name: 'connection_report', sessionId, metadata: { serviceId: service.id, outcome: 'fail', reason: 'invalid' },
+    })).status).toBe(400);
+    await request(app).post('/api/events').send({
+      name: 'service_click', sessionId, metadata: { serviceId: service.id, mode: 'guide' },
+    });
+
+    const response = await request(app).get('/api/services/funnel');
+    const entry = response.body.funnel.find((row: { id: string }) => row.id === service.id);
+    expect(entry.connection).toEqual({ success: 1, partial: 0, fail: 1, reasons: { auth_issue: 1 } });
+    expect(entry.docClicks).toBe(1);
+    expect(entry.previewClicks).toBe(0);
+    expect(entry.impressions).toBe(0);
+    expect(JSON.stringify(entry)).not.toContain('must-not-be-retained');
   });
 
   it('accepts service feedback metadata and rejects invalid ratings', async () => {

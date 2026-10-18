@@ -3,7 +3,7 @@
 ## 1. 문서 목적
 - `prd.md`를 구현 가능한 기술 요구사항으로 고정한다.
 - 현재 저장소에 실제로 구현·배포된 아키텍처, API, 데이터 모델을 정의한다.
-- 승격됐으나 미구현인 요구사항은 상태를 명시하고 현재 API 계약과 구분한다(§11).
+- 승격 요구사항의 구현 상태와 현재 API 계약을 §11에 구분해 기록한다.
 
 ## 2. 범위
 ### 2.1 In Scope (Web MVP)
@@ -12,7 +12,7 @@
 3. 익명 퍼널 이벤트 수집 및 이메일 리드 저장(중복 방지).
 4. 스와이프 이유/미리보기 재체험 의향 마이크로 피드백 + 서비스별 퍼널 드롭오프 집계 통계
    (Phase 2 §14.3 승격, 계정 불필요).
-5. 작업 기준 발견 + 검증된 연결 가이드 3단계(`prd.md` §9-6 승격, **미구현**, 상세 §11):
+5. 작업 기준 발견 + 검증된 연결 가이드 3단계(`prd.md` §9-6 승격, 구현 완료, 상세 §11):
    유형·작업 기반 카탈로그/가이드 → 검증 수준 배지 → 익명 연결 결과 피드백·집계.
    기존 API를 후방 호환 확장하며 신규 엔드포인트·계정·외부 스킬/MCP 자동 실행은 도입하지 않는다.
 
@@ -137,22 +137,25 @@ flowchart LR
 
 ### 5.2 백엔드 API (`apps/api/src/server.ts`)
 1. `GET /health` — 컨테이너 헬스체크용 상태 엔드포인트.
-2. `GET /api/services` — 쿼리 파라미터 `shuffle`(`vibe-venture`|`sns`|`dating`|`productivity`|`game`,
+2. `GET /api/services` — 쿼리 파라미터 `shuffle`(`vibe-venture`|`sns`|`dating`|`productivity`|`game`|`task`,
    생략 또는 미인식 값은 `vibe-venture`로 폴백, `apps/api/src/shuffles.ts`의 `resolveShuffleCatalog`)로
-   선택한 셔플의 카탈로그에, 선택적 쿼리 파라미터 `tier`(`mainstream`|`emerging`, 그 외 값/생략은
-   필터링 없음 — `filterByTier()`)를 적용해 공식 링크 기준으로 중복 제거(`dedupeCatalog`)한 뒤, 각
-   서비스에 대해 `checkServiceHealth()`로 실시간 접속 가능 여부를 확인하고, 실패한 서비스를 제외한
-   목록을 반환한다. 셔플별 카탈로그는 `apps/api/src/catalogs/{sns,dating,productivity,game}.ts`에
+   선택한 셔플의 카탈로그에 선택적 쿼리 파라미터 `tier`(`mainstream`|`emerging`, 그 외 값/생략은
+   필터링 없음 — `filterByTier()`)를 적용한다. task 셔플에는 선택적 `task`·`kind` 필터를 추가 적용하며,
+   유효하지 않은 task/kind 값은 필터를 생략한 것으로 처리한다. 유형 미지정 항목은 `service`로 간주한다.
+   후보를 공식 링크 기준으로 중복 제거(`dedupeCatalog`)한 다음 `checkServiceHealth()`로 실시간 접속
+   가능 여부를 확인하고, 실패한 서비스를 제외한
+   목록을 반환한다. 테마 카탈로그는 `apps/api/src/catalogs/{sns,dating,productivity,game}.ts`에
    정적으로 정의되어 있으며 각 주류/비주류 티어에 각각 20~30개의 실서비스를 둔다(§9-4 #5/#7:
    공개 정보, 직접 요약한 설명文). 반복되는 카탈로그 필드는 `catalog-entry.ts` 빌더에서 생성하고,
    서비스별 공식 URL/이름/설명/태그만 데이터로 선언한다. `tier` 필드가 없는 엔트리(바이브 벤처
-   카탈로그 등)는 `mainstream`으로 취급한다.
+   카탈로그 등)는 `mainstream`으로 취급한다. 작업 카탈로그는 `catalogs/task.ts`에서 별도 큐레이션한다(§11).
 2-1. `GET /api/services/funnel`·`GET /api/services/ranking`은 `shuffles.ts`의
    `allShuffleServices()`(모든 셔플 카탈로그를 이어 붙인 배열)를 `dedupeCatalog()`로 중복 제거한
    `dedupedAllShuffles`를 집계 대상으로 사용한다 — 셔플 간 집계를 분리하지 않는다는 §9-4 #6 설계를
-   그대로 따르며, 두 엔드포인트의 응답 스키마는 변경되지 않는다.
+   그대로 따른다. 랭킹 응답 스키마는 유지하고 퍼널은 §11.2의 연결 결과·문서 클릭 필드를 추가한다.
 3. `POST /api/events` — 퍼널 이벤트(`landing_view`, `profile_submit`, `card_like`, `card_dislike`,
-   `card_skip`, `card_undo`, `service_click`, `result_view`, `email_submit`, `service_feedback_submit`)를
+   `card_skip`, `card_undo`, `service_click`, `result_view`, `email_submit`, `service_feedback_submit`,
+   `connection_report`)를
    Zod로 검증 후 인메모리 배열에 적재(최대 5000건, 초과 시 오래된 항목부터 제거). `service_feedback_submit`은
    `metadata.serviceId`(필수 문자열), `metadata.rating`(필수, 1~5 정수), `metadata.comment`(선택,
    최대 300자 문자열)를 `superRefine`으로 추가 검증한다. `card_dislike`의 `metadata.reason`/
@@ -164,8 +167,10 @@ flowchart LR
    이유 태그 분포(`dislikeReasons`), 재체험 의향 분포(`retryIntent: {yes,no,unsure}`)를 반환한다.
    `metadata.stage === 'reason_tag'`인 `card_dislike`와 `metadata.stage === 'preview_close'`인
    `service_click`은 각각 이유 태그/재체험 의향 집계에만 쓰이고 기본 카운트(`dislikes`/
-   `previewClicks`)에는 포함하지 않아 이중 집계를 막는다. 노출 또는 미리보기 클릭이 1회 이상인
-   서비스만, 노출 수 내림차순으로 반환한다. 새 영속 저장소 없이 기존 인메모리 이벤트 배열만
+   `previewClicks`)에는 포함하지 않아 이중 집계를 막는다. 연결 결과는 `connection`에 자기 보고
+   성공/일부 성공/실패 및 실패 이유를 집계하고, 가이드 문서 링크 클릭은 별도 `docClicks`로 반환해
+   설치 성공과 혼합하지 않는다. 노출·미리보기·문서 클릭·연결 결과 중 하나 이상 집계된 서비스를
+   노출 수 내림차순으로 반환한다. 새 영속 저장소 없이 기존 인메모리 이벤트 배열만
    재사용한다(§6.3).
 6. `GET /api/services/ranking` — `events` 배열에서 `card_like` 이벤트를 `metadata.serviceId` 기준으로
    집계하고, 선택 횟수가 1회 이상인 서비스를 내림차순 정렬해 상위 `RANKING_LIMIT`(20)개를
@@ -295,9 +300,9 @@ type FunnelEntry = {
 | 메서드/경로 | 설명 | 검증 | 응답 |
 | --- | --- | --- | --- |
 | `GET /health` | 컨테이너 헬스체크 | - | `{ status: 'ok', service, timestamp }` |
-| `GET /api/services` | 헬스체크 통과 + 중복 제거된 카탈로그 | `?shuffle=vibe-venture\|sns\|dating\|productivity\|game`(선택, 기본/미인식 값은 `vibe-venture`) | `{ services: Service[] }` |
+| `GET /api/services` | 헬스체크 통과 + 중복 제거된 카탈로그 | `?shuffle=vibe-venture\|sns\|dating\|productivity\|game\|task`(선택, 기본/미인식 값은 `vibe-venture`); task 셔플에서 선택적 `task`/`kind` 필터 | `{ services: Service[] }` |
 | `GET /api/services/ranking` | 누적 `card_like` 횟수 기준 상위 `RANKING_LIMIT`(20)개 서비스 랭킹 | - | `{ ranking: RankingEntry[] }` |
-| `GET /api/services/funnel` | 서비스별 노출/관심 있음/관심 없음/건너뛰기/미리보기 클릭/이유 태그/재체험 의향/체류시간 버킷 집계 | - | `{ funnel: FunnelEntry[] }` |
+| `GET /api/services/funnel` | 서비스별 노출/관심 있음/관심 없음/건너뛰기/미리보기·문서 클릭/이유 태그/재체험 의향/체류시간/연결 결과 집계 | - | `{ funnel: FunnelEntry[] }` |
 | `POST /api/events` | 퍼널 이벤트 적재 | Zod(`eventSchema`) | `202 { accepted: true }` / `400` |
 | `POST /api/email-leads` | 이메일 리드 저장 | Zod(`emailSchema`) | `201` / `409` 중복 / `400` |
 
@@ -309,7 +314,9 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
   집계 이중 집계 방지 포함), `apps/api/tests/unit.health-check.test.ts`(헬스체크 캐시/폴백/테스트
   환경 단축 경로).
 - Web: Vitest + jsdom. `apps/web/tests/catalog-load.unit.test.ts`(시작 버튼 경쟁 조건 가드),
-  `apps/web/tests/match-score.unit.test.ts`(`matchScore`/`matchedInterestTags` 가중치 분리 검증).
+  `apps/web/tests/match-score.unit.test.ts`(`matchScore`/`matchedInterestTags` 가중치 분리 및 작업 태그 점수),
+  `apps/web/tests/catalog-loader.unit.test.ts`(작업 필터 캐시), `apps/web/tests/task-discovery.unit.test.ts`
+  (작업 진입·빈 결과·안전한 가이드 렌더링·연결 결과 제출).
 - 모든 테스트는 `NODE_ENV=test`에서 외부 네트워크 호출 없이 동작해야 한다.
 
 ## 9. 비기능 요구사항
@@ -404,7 +411,7 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
 6. 피드백 포털 무료 열람(`GET .../feedback`)은 §10.2 최소 버전과 함께 제공하고, 유료 개선 리포트
    (`POST .../improvement-report`)는 PG 연동·환불 정책 확정 후 마지막 단계로 추가한다.
 
-## 11. 작업 기준 발견 + 검증된 연결 가이드 기술 설계 (`prd.md` §9-6 승격, 📝 미구현)
+## 11. 작업 기준 발견 + 검증된 연결 가이드 기술 설계 (`prd.md` §9-6 승격, ✅ 구현됨)
 
 모든 변경은 **후방 호환 optional 필드/값 추가**로 하며 기존 API 계약·테마 셔플 동작을 바꾸지 않는다.
 신규 엔드포인트는 만들지 않고 기존 `GET /api/services`, `POST /api/events`, `GET /api/services/funnel`을
@@ -412,7 +419,7 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
 
 ### 11.1 데이터 모델 (`apps/api/src/catalog.ts`)
 ```ts
-type CatalogService = CatalogService & {            // 모두 optional, 미지정 = 기존 서비스
+type CatalogService = {                             // 기존 필드에 아래 optional 필드를 추가
   kind?: 'product' | 'service' | 'skill' | 'mcp';   // 기본 'service'
   tasks?: string[];                                  // 해결하는 작업 태그 (예: 'report-automation')
   connection?: {                                     // skill/mcp 전용
@@ -436,7 +443,9 @@ type CatalogService = CatalogService & {            // 모두 optional, 미지�
   `link`는 기존 헬스체크 통과를 의미한다(응답 `health`와 별개).
 - `skill`/`mcp` 항목도 `serviceUrl`(공식 페이지)을 가지므로 기존 헬스체크·중복 제거·이미지 프록시를
   그대로 사용한다. 이미지가 없는 항목은 텍스트 기반 대체 UI를 쓴다.
-- 카탈로그 로드 시 `connection`/`verification`의 필수 조건 위반(위 주석)은 테스트에서 실패 처리한다.
+- 작업 셔플은 `apps/api/src/catalogs/task.ts`의 수동 큐레이션 27개 항목(국내 메신저·공공 데이터·결제 포함)을 제공한다. 출처·환경·검증일을
+  기록하지 않은 값은 UI에서 "확인 안 됨"/"검증일 미기록"으로 표시하며, 헬스체크로 상위 검증 수준을 올리지 않는다.
+- API 테스트에서 카탈로그 유형·작업 태그, 연결 가이드 필수 필드, 검증 출처와 상위 검증 수준의 필수 날짜를 확인한다.
 
 ### 11.2 API 변경
 - `GET /api/services?shuffle=task`(신규 shuffle 값, 기존 값은 그대로) + 선택 `&task=<태그>`·`&kind=<유형>`
@@ -445,7 +454,8 @@ type CatalogService = CatalogService & {            // 모두 optional, 미지�
 - `POST /api/events`: `EventName`에 `connection_report` 추가.
   `metadata: { serviceId: string; outcome: 'success'|'partial'|'fail'; reason?: ConnectionReason; agent?: string }`,
   `ConnectionReason = 'install_blocked'|'auth_issue'|'permission_issue'|'incompatible'|'docs_outdated'|'other'`.
-  서버는 `outcome`/`reason` 허용값만 추가 검증한다. 키·토큰·설정 파일 내용은 받지 않는다.
+  서버는 `outcome`/`reason` 허용값과 선택적 `agent` 길이를 검증하며 연결 결과 메타데이터는 허용 필드만 보존한다.
+  키·토큰·설정 파일 내용은 받지 않는다.
 - `GET /api/services/funnel`의 `FunnelEntry`에 `connection?: { success; partial; fail; reasons: Record<string, number> }`
   추가. `docClicks`는 별도 카운터(`service_click`의 `mode:'guide'`)로 분리하며 성공으로 합산하지 않는다.
   기존 필드·집계는 변경하지 않으며, 추천 점수·정렬에 사용하지 않는다.
@@ -465,6 +475,6 @@ type CatalogService = CatalogService & {            // 모두 optional, 미지�
 - Web: 연결 가이드 렌더링(누락 값 "확인 안 됨"), 스킬/MCP에서 iframe 미리보기 미노출, 검증 배지 표시.
 
 ### 11.5 롤아웃 및 이후 단계
-1) §11.1 스키마 + 큐레이션 20~30개 + 카드/가이드 UI → 2) 검증 배지 → 3) 연결 결과 피드백·집계.
+1) §11.1 스키마 + 27개 큐레이션 + 카드/가이드 UI ✅ → 2) 검증 배지 ✅ → 3) 연결 결과 피드백·집계 ✅.
 이후(별도 승격): 에이전트용 읽기 전용 조회, 공급자 제출·런치 보드(§10.2 빌더 계정 연계).
 외부 콘텐츠를 에이전트에 반환하는 단계가 오면 프롬프트 인젝션·요청 제한·캐시 설계를 선행한다.
