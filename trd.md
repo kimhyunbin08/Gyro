@@ -122,11 +122,14 @@ flowchart LR
     서비스는 서버/클라이언트 모두 `'mainstream'`으로 간주한다. `theme` 화면에서 테마를 고르면
     바로 `tier` 화면(`renderTierChoices()`)이 뜨고 "주류 서비스 / 비주류(신생) 서비스 / 둘 다
     (추천)" 3개 버튼을 보여준다("둘 다"는 `.choice.recommended`로 시각적으로 강조되지만 필수
-    선택지는 아니며 사용자가 직접 눌러야 다음으로 진행한다). 주류 또는 비주류를 선택하면
-    `selectTier()`가 `GET /api/services?shuffle=<테마>&tier=mainstream|emerging`을 호출하고,
-    "둘 다"를 선택하면 `tier` 파라미터 없이 `GET /api/services?shuffle=<테마>`를 호출해 두 부류를
-    모두 가져온다. `tier` 화면의 "← 테마 다시 고르기" 버튼은 `theme` 화면으로 돌아간다(홈으로 가는
-    것과는 별개 동작). 이 화면은 테마 셔플에만 존재하며 바이브 벤처 플로우에는 삽입되지 않는다.
+    선택지는 아니며 사용자가 직접 눌러야 다음으로 진행한다). 테마를 선택하면 해당 테마의 전체
+    카탈로그를 백그라운드에서 미리 가져오고, 동일 테마의 요청 Promise/응답은
+    메모리 캐시(5분 TTL)에서 재사용한다(`apps/web/src/catalog-loader.ts`). 티어를 선택하면 이미
+    준비된 목록을 클라이언트에서 필터링하므로 티어 선택 뒤 API 왕복을 추가하지 않는다. 카탈로그
+    요청 중에도 질문 화면은 즉시 표시하고, 실제 카드가 준비되기 전에는 "카드 만나보기"만 비활성화해
+    0장 덱 진입을 막는다. `tier` 화면의 "← 테마 다시 고르기" 버튼은 `theme` 화면으로 돌아간다
+    (홈으로 가는 것과는 별개 동작). 이 화면은 테마 셔플에만 존재하며 바이브 벤처 플로우에는
+    삽입되지 않는다.
 
 ### 5.2 백엔드 API (`apps/api/src/server.ts`)
 1. `GET /health` — 컨테이너 헬스체크용 상태 엔드포인트.
@@ -136,9 +139,10 @@ flowchart LR
    필터링 없음 — `filterByTier()`)를 적용해 공식 링크 기준으로 중복 제거(`dedupeCatalog`)한 뒤, 각
    서비스에 대해 `checkServiceHealth()`로 실시간 접속 가능 여부를 확인하고, 실패한 서비스를 제외한
    목록을 반환한다. 셔플별 카탈로그는 `apps/api/src/catalogs/{sns,dating,productivity,game}.ts`에
-   정적으로 정의되어 있으며, 각 30~40개의 실서비스(주류+비주류 혼합)로 구성된다(§9-4 #5/#7:
-   합법적으로 수집한 공개 정보, 직접 요약한 설명文). `tier` 필드가 없는 엔트리(바이브 벤처 카탈로그
-   등)는 `mainstream`으로 취급한다.
+   정적으로 정의되어 있으며 각 주류/비주류 티어에 각각 20~30개의 실서비스를 둔다(§9-4 #5/#7:
+   공개 정보, 직접 요약한 설명文). 반복되는 카탈로그 필드는 `catalog-entry.ts` 빌더에서 생성하고,
+   서비스별 공식 URL/이름/설명/태그만 데이터로 선언한다. `tier` 필드가 없는 엔트리(바이브 벤처
+   카탈로그 등)는 `mainstream`으로 취급한다.
 2-1. `GET /api/services/funnel`·`GET /api/services/ranking`은 `shuffles.ts`의
    `allShuffleServices()`(모든 셔플 카탈로그를 이어 붙인 배열)를 `dedupeCatalog()`로 중복 제거한
    `dedupedAllShuffles`를 집계 대상으로 사용한다 — 셔플 간 집계를 분리하지 않는다는 §9-4 #6 설계를
@@ -187,6 +191,9 @@ flowchart LR
 8. 상태는 프로세스별 인메모리이며 재시작 시 재확인한다. 분산 단일 스케줄러나 영속 이력은 없다.
    `infra/main.bicep`의 API `minReplicas: 1`로 scale-to-zero를 방지한다. 서버가 중지된 기간의
    점검은 수행되지 않으며, 다중 복제본에서는 각 복제본이 독립 점검한다.
+9. 웹 클라이언트는 사용자가 고른 테마 카탈로그만 백그라운드 사전 로드하고, 5분간 결과를 메모리에
+   보관한다. 티어 선택은 로컬 필터링으로 처리하며, 헬스체크 결과는 서버의 기존 10분 캐시를
+   재사용한다.
 
 ### 5.4 서비스 카드 이미지 프록시 (`apps/api/src/image-proxy.ts`)
 카탈로그의 `imageUrl`은 더 이상 `GET /api/services` 응답에 그대로 내려가지 않는다. 각 카탈로그
@@ -215,6 +222,7 @@ type CatalogService = {
   imageUrl: string; serviceUrl: string; tags: string[];
   audiences: ('student' | 'teacher' | 'parent' | 'other')[];
   room: string; roomKey: string; number: string;
+  tier?: 'mainstream' | 'emerging';
 };
 ```
 

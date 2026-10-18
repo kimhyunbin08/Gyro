@@ -53,6 +53,20 @@ describe('Gyro discovery API', () => {
     expect(unfiltered.body.services.length).toBe(mainstreamOnly.body.services.length + emergingOnly.body.services.length);
   });
 
+  it('provides 20–30 unique services for every theme and tier', async () => {
+    for (const shuffle of ['sns', 'dating', 'productivity', 'game']) {
+      for (const tier of ['mainstream', 'emerging']) {
+        const response = await request(app).get(`/api/services?shuffle=${shuffle}&tier=${tier}`);
+        expect(response.status).toBe(200);
+        expect(response.body.services.length).toBeGreaterThanOrEqual(20);
+        expect(response.body.services.length).toBeLessThanOrEqual(30);
+        expect(new Set(response.body.services.map((service: { id: string }) => service.id)).size).toBe(response.body.services.length);
+        expect(new Set(response.body.services.map((service: { serviceUrl: string }) => service.serviceUrl.trim().toLowerCase().replace(/\/+$/, ''))).size).toBe(response.body.services.length);
+        expect(response.body.services.every((service: { tier?: string }) => (service.tier ?? 'mainstream') === tier)).toBe(true);
+      }
+    }
+  });
+
   it('accepts anonymous funnel events and validates payloads', async () => {
     const accepted = await request(app).post('/api/events').send({ name: 'card_like', sessionId: 'session-1234', metadata: { serviceId: 'vibe-study' } });
     expect(accepted.status).toBe(202);

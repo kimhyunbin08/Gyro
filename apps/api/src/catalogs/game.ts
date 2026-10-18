@@ -1,4 +1,5 @@
 import type { CatalogService } from '../catalog.js';
+import { createCuratedServices } from './catalog-entry.js';
 
 export const gameCatalog: CatalogService[] = [
   {
@@ -886,4 +887,26 @@ export const gameCatalog: CatalogService[] = [
     "number": "40",
     "tier": "emerging"
   },
+  ...createCuratedServices('game', '게임', 41, 'emerging', [
+    { name: 'Schedule I', serviceUrl: 'https://store.steampowered.com/app/3164500/Schedule_I/', tagline: '작은 사업을 키우며 도시를 탐험하는 오픈월드 시뮬레이션', description: '인디 개발사 TVGS가 만든 오픈월드 시뮬레이션 게임이다. 자원을 관리하고 사업과 장비를 확장하며 친구와 함께 도시를 탐험한다.', tags: ['전략', '멀티플레이어'] },
+    { name: 'Hades II', serviceUrl: 'https://store.steampowered.com/app/1145350/Hades_II/', tagline: '그리스 신화 세계를 반복해서 도전하는 액션 로그라이크', description: 'Supergiant Games의 액션 로그라이크 후속작이다. 마녀 멜리노에가 무기와 마법을 조합해 지하 세계와 타이탄에 맞선다.', tags: ['전략', '캐주얼'] },
+    { name: 'Hollow Knight: Silksong', serviceUrl: 'https://store.steampowered.com/app/1030300/Hollow_Knight_Silksong/', tagline: '새로운 왕국을 탐험하는 정밀한 액션 어드벤처', description: 'Team Cherry가 선보이는 메트로배니아 액션 게임이다. 새로운 주인공 호넷이 낯선 왕국을 탐험하고 적과 보스에 도전한다.', tags: ['전략', '캐주얼'] },
+    { name: 'Slay the Spire 2', serviceUrl: 'https://store.steampowered.com/app/2868840/Slay_the_Spire_2/', tagline: '카드 덱을 구성하며 탑을 오르는 로그라이크 전략 게임', description: '카드 선택과 전투 전략으로 매번 달라지는 경로를 돌파하는 덱빌딩 로그라이크다. 새로운 캐릭터와 카드 조합으로 전투 방식을 설계한다.', tags: ['전략', '캐주얼'] },
+    { name: 'Blue Prince', serviceUrl: 'https://store.steampowered.com/app/1569580/Blue_Prince/', tagline: '방을 직접 선택하며 비밀스러운 저택을 탐험하는 퍼즐 어드벤처', description: '매일 구조가 달라지는 저택에서 방을 선택해 길을 만들고 단서를 모아 미스터리를 풀어가는 전략 퍼즐 게임이다.', tags: ['전략', '캐주얼'] },
+    { name: 'Dispatch', serviceUrl: 'https://store.steampowered.com/app/2592160/Dispatch/', tagline: '히어로 팀을 배치하고 선택으로 이야기를 바꾸는 어드벤처', description: '에피소드형 이야기와 전략적인 팀 운영을 결합한 게임이다. 플레이어의 선택과 임무 배치가 캐릭터 관계와 사건 전개에 영향을 준다.', tags: ['전략', '캐주얼'] },
+    { name: 'Abiotic Factor', serviceUrl: 'https://store.steampowered.com/app/427410/Abiotic_Factor/', tagline: '연구소에 갇힌 과학자들이 힘을 합쳐 살아남는 협동 생존 게임', description: '최대 여섯 명이 협력해 비밀 연구소의 위협을 피하고, 도구를 제작하며 탈출 방법을 찾는 생존 크래프팅 게임이다.', tags: ['멀티플레이어', '전략'] },
+    { name: 'Pacific Drive', serviceUrl: 'https://store.steampowered.com/app/1458140/Pacific_Drive/', tagline: '자동차를 정비하며 변칙 현상이 가득한 지역을 탐험하는 생존 게임', description: '스테이션 왜건을 작업장 삼아 위험 구역을 주행하고 자원을 모아 차량을 개선하는 1인칭 생존 어드벤처다.', tags: ['전략', '캐주얼'] },
+    { name: 'Dave the Diver', serviceUrl: 'https://store.steampowered.com/app/1868140/DAVE_THE_DIVER/', tagline: '낮에는 바다를 탐험하고 밤에는 초밥집을 운영하는 어드벤처', description: '민트로켓이 개발한 하이브리드 어드벤처 게임이다. 낮에는 바다에서 재료를 모으고 밤에는 초밥 식당을 운영하며 이야기를 진행한다.', tags: ['캐주얼', '전략'] },
+    { name: 'DREDGE', serviceUrl: 'https://store.steampowered.com/app/1562430/DREDGE/', tagline: '낚시와 탐험으로 안개 속 섬들의 비밀을 밝혀가는 어드벤처', description: '낚싯배를 타고 군도를 탐험하며 물고기를 잡고, 어두워진 바다에 숨은 미스터리를 밝혀가는 싱글플레이 어드벤처다.', tags: ['캐주얼', '전략'] },
+    { name: 'The Plucky Squire', serviceUrl: 'https://store.steampowered.com/app/1627570/The_Plucky_Squire/', tagline: '책 속과 바깥 세계를 오가며 퍼즐을 푸는 액션 어드벤처', description: '동화책 속 영웅이 책의 2D 페이지와 바깥의 3D 공간을 오가며 적을 물리치고 퍼즐을 푸는 이야기 중심 액션 게임이다.', tags: ['캐주얼', '전략'] },
+    { name: 'Animal Well', serviceUrl: 'https://store.steampowered.com/app/813230/ANIMAL_WELL/', tagline: '생물과 도구의 비밀을 발견하며 미로를 탐험하는 픽셀 어드벤처', description: '작은 생명체로 미로 같은 세계를 탐험하고, 아이템의 새로운 쓰임과 숨겨진 상호작용을 발견하는 탐험 중심 메트로배니아다.', tags: ['전략', '캐주얼'] },
+    { name: 'Thank Goodness You’re Here!', serviceUrl: 'https://store.steampowered.com/app/2366980/Thank_Goodness_Youre_Here/', tagline: '기묘한 마을 사람들의 부탁을 해결하는 코미디 어드벤처', description: '영국 북부의 가상 마을을 돌아다니며 주민들의 황당한 부탁을 해결하는 코미디 액션 게임이다. 짧은 장면과 손그림 애니메이션이 특징이다.', tags: ['캐주얼', '커뮤니티'] },
+    { name: 'Nine Sols', serviceUrl: 'https://store.steampowered.com/app/1809540/Nine_Sols/', tagline: '정교한 패링 전투로 고대 세계의 보스에 도전하는 액션 게임', description: '대만 스튜디오 Red Candle Games가 만든 2D 액션 플랫폼 게임이다. 도교풍 SF 세계를 탐험하고 패링 중심 전투로 강력한 적과 맞선다.', tags: ['전략', '캐주얼'] },
+    { name: 'Fields of Mistria', serviceUrl: 'https://store.steampowered.com/app/2142790/Fields_of_Mistria/', tagline: '농사를 짓고 마을 사람들과 관계를 쌓는 판타지 생활 시뮬레이션', description: '마을을 복구하며 농사, 채집, 제작과 관계 형성을 즐기는 생활 시뮬레이션 게임이다. 계절과 마을의 이야기에 따라 새로운 활동이 열린다.', tags: ['캐주얼', '커뮤니티'] },
+    { name: 'Core Keeper', serviceUrl: 'https://store.steampowered.com/app/1621690/Core_Keeper/', tagline: '지하 세계에서 자원을 모으고 기지를 키우는 협동 샌드박스', description: '절차적으로 생성되는 지하 동굴을 탐험하며 채굴, 농사, 제작과 보스 전투를 진행하는 샌드박스 게임이다. 친구와 함께 플레이할 수 있다.', tags: ['멀티플레이어', '전략'] },
+    { name: 'Deep Rock Galactic: Survivor', serviceUrl: 'https://store.steampowered.com/app/2321470/Deep_Rock_Galactic_Survivor/', tagline: '외계 행성에서 드워프를 조작해 자원을 캐고 몰려오는 적을 막는 로그라이트', description: 'Deep Rock Galactic 세계관을 바탕으로 한 싱글플레이 자동 사격 로그라이트다. 동굴을 파고 장비를 강화해 외계 생물 무리를 돌파한다.', tags: ['전략', '캐주얼'] },
+    { name: 'Vampire Survivors', serviceUrl: 'https://store.steampowered.com/app/1794680/Vampire_Survivors/', tagline: '간단한 조작으로 끝없이 몰려오는 적을 버티는 액션 로그라이트', description: '짧은 세션과 자동 공격 중심의 간결한 규칙으로 로그라이트 장르의 대중화를 이끈 인디 액션 게임이다. 무기 조합과 성장 선택으로 매번 다른 빌드를 만든다.', tags: ['캐주얼', '전략'] },
+    { name: 'Slay the Princess', serviceUrl: 'https://store.steampowered.com/app/1989270/Slay_the_Princess/', tagline: '선택과 반복되는 이야기를 통해 진실을 찾아가는 심리 호러', description: '숲속 오두막의 공주를 둘러싼 이야기를 선택지에 따라 여러 갈래로 경험하는 손그림 심리 호러 비주얼 노벨이다.', tags: ['전략', '캐주얼'] },
+    { name: 'Chants of Sennaar', serviceUrl: 'https://store.steampowered.com/app/1931770/Chants_of_Sennaar/', tagline: '낯선 언어를 해독해 서로 다른 민족을 연결하는 퍼즐 어드벤처', description: '문자와 대화를 관찰해 각 집단의 언어를 추론하고, 탑의 세계를 탐험하며 단절된 공동체를 이어주는 퍼즐 게임이다.', tags: ['전략', '커뮤니티'] },
+  ]),
 ];

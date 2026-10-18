@@ -1,4 +1,5 @@
 import type { CatalogService } from '../catalog.js';
+import { createCuratedServices } from './catalog-entry.js';
 
 export const productivityCatalog: CatalogService[] = [
   {
@@ -829,4 +830,26 @@ export const productivityCatalog: CatalogService[] = [
     "number": "38",
     "tier": "emerging"
   },
+  ...createCuratedServices('productivity', '생산성', 39, 'emerging', [
+    { name: 'Routine', serviceUrl: 'https://routine.co', tagline: '일정, 할 일, 메모를 한 화면에서 정리하는 업무 공간', description: '캘린더와 작업, 노트를 연결해 하루의 계획과 업무 맥락을 한곳에서 관리하도록 돕는 생산성 워크스페이스다.', tags: ['업무관리', '메모·노트'] },
+    { name: 'Taskade', serviceUrl: 'https://www.taskade.com', tagline: '프로젝트 보드와 AI 작업 공간을 함께 만드는 협업 도구', description: '할 일 목록, 마인드맵, 프로젝트 보드를 실시간으로 협업하고 자동화 에이전트와 함께 작업 공간을 구성할 수 있다.', tags: ['업무관리', '협업', '자동화'] },
+    { name: 'Mem', serviceUrl: 'https://mem.ai', tagline: '메모를 자동으로 연결하고 다시 찾아주는 지식 관리 앱', description: '기록한 메모와 문서를 AI 검색과 자동 정리 기능으로 연결해 개인 지식과 업무 정보를 쉽게 다시 찾도록 돕는다.', tags: ['메모·노트', '자동화'] },
+    { name: 'Logseq', serviceUrl: 'https://logseq.com', tagline: '로컬 우선 방식으로 생각과 업무 기록을 연결하는 아웃라이너', description: '일일 노트와 링크 기반 그래프를 사용해 아이디어, 문서, 작업을 연결하는 오픈소스 지식 관리 도구다.', tags: ['메모·노트', '업무관리'] },
+    { name: 'Reflect', serviceUrl: 'https://reflect.app', tagline: '네트워크 노트와 캘린더를 연결하는 개인 지식 도구', description: '빠른 메모, 양방향 링크, 캘린더 기록을 연결해 생각과 회의 내용을 정리하고 검색할 수 있는 노트 앱이다.', tags: ['메모·노트', '업무관리'] },
+    { name: 'Motion', serviceUrl: 'https://www.usemotion.com', tagline: '할 일과 캘린더를 자동으로 배치해 하루를 계획하는 앱', description: '작업의 우선순위와 마감일을 캘린더 일정에 맞춰 배치하고, 일정 변화에 따라 계획을 다시 조정하는 업무 관리 서비스다.', tags: ['업무관리', '자동화'] },
+    { name: 'Heptabase', serviceUrl: 'https://heptabase.com', tagline: '카드와 화이트보드로 복잡한 지식을 시각화하는 노트 앱', description: '자료와 생각을 카드로 기록하고 화이트보드에서 시각적으로 연결해 연구와 프로젝트의 맥락을 정리하도록 돕는다.', tags: ['메모·노트', '협업'] },
+    { name: 'Superlist', serviceUrl: 'https://www.superlist.com', tagline: '개인 할 일과 팀 프로젝트를 한곳에서 관리하는 앱', description: '작업 목록을 개인과 팀 단위로 만들고 문서, 체크리스트, 협업 기능을 함께 사용해 계획을 실행으로 옮길 수 있다.', tags: ['업무관리', '협업'] },
+    { name: 'Granola', serviceUrl: 'https://www.granola.ai', tagline: '회의 메모와 대화를 정리해 후속 작업을 만드는 노트 앱', description: '회의 중 작성한 메모를 대화 맥락과 결합해 정리하고, 핵심 내용과 다음에 할 일을 빠르게 확인할 수 있도록 돕는다.', tags: ['메모·노트', '자동화'] },
+    { name: 'Readwise', serviceUrl: 'https://readwise.io', tagline: '책과 웹에서 저장한 하이라이트를 다시 읽고 정리하는 도구', description: '전자책과 웹에서 수집한 하이라이트를 한곳에 모으고, 주기적인 복습과 노트 앱 연동으로 지식이 잊히지 않도록 돕는다.', tags: ['메모·노트', '자동화'] },
+    { name: 'Morgen', serviceUrl: 'https://www.morgen.so', tagline: '여러 캘린더와 할 일을 하나의 일정 화면으로 모으는 앱', description: '여러 일정 서비스와 작업 관리 도구를 연결하고, 드래그 앤 드롭 방식으로 하루의 계획을 조정할 수 있다.', tags: ['업무관리', '자동화'] },
+    { name: 'FlowSavvy', serviceUrl: 'https://flowsavvy.app', tagline: '할 일의 남은 시간을 캘린더에 자동으로 배치하는 도구', description: '작업 시간과 마감일을 입력하면 빈 시간을 찾아 일정을 자동 배치하고, 새 일정이 생길 때 계획을 다시 계산한다.', tags: ['업무관리', '자동화'] },
+    { name: 'Slite', serviceUrl: 'https://slite.com', tagline: '팀의 문서와 질문을 검색 가능한 지식 공간으로 정리하는 앱', description: '팀 문서와 절차, 회의 기록을 공동 편집하고 검색해 조직의 지식을 한곳에서 공유하도록 지원한다.', tags: ['메모·노트', '협업'] },
+    { name: 'Fibery', serviceUrl: 'https://fibery.io', tagline: '업무 데이터와 팀 프로세스를 연결해 만드는 맞춤형 작업 공간', description: '문서, 데이터베이스, 업무 프로세스를 연결해 제품과 조직에 맞는 협업 공간을 직접 구성할 수 있는 플랫폼이다.', tags: ['업무관리', '협업'] },
+    { name: 'Fellow', serviceUrl: 'https://fellow.app', tagline: '회의 안건과 결정 사항, 후속 작업을 팀과 함께 기록하는 도구', description: '회의 전 안건 작성부터 회의 중 메모와 회의 후 실행 항목 관리까지 팀의 회의 흐름을 한곳에서 정리한다.', tags: ['협업', '업무관리'] },
+    { name: 'Fathom', serviceUrl: 'https://fathom.video', tagline: '온라인 회의를 기록하고 핵심 순간을 찾아주는 회의 도구', description: '화상 회의를 녹화·전사하고 핵심 구간과 요약을 공유해 팀이 대화 내용을 다시 확인하고 후속 작업을 정리하도록 돕는다.', tags: ['자동화', '협업'] },
+    { name: 'tl;dv', serviceUrl: 'https://tldv.io', tagline: '회의 녹화와 요약을 팀 지식으로 재사용하는 서비스', description: '화상 회의를 녹화하고 전사·요약해 팀과 공유하며, 회의 내용을 검색하고 고객 대화의 반복 주제를 파악할 수 있다.', tags: ['자동화', '협업'] },
+    { name: 'Fireflies.ai', serviceUrl: 'https://fireflies.ai', tagline: '회의 대화를 전사하고 검색 가능한 기록으로 바꾸는 AI 노트', description: '온라인 회의에 참여해 대화를 전사·요약하고 주요 결정과 할 일을 검색할 수 있도록 정리하는 회의 생산성 도구다.', tags: ['자동화', '메모·노트'] },
+    { name: 'Bardeen', serviceUrl: 'https://www.bardeen.ai', tagline: '반복되는 웹 업무를 자동화하는 브라우저 기반 도구', description: '웹 앱 사이에서 반복하는 데이터 수집과 입력 작업을 자동화하고, 재사용 가능한 워크플로로 업무 시간을 줄이도록 돕는다.', tags: ['자동화', '업무관리'] },
+    { name: 'Relay.app', serviceUrl: 'https://www.relay.app', tagline: '사람의 확인 단계를 포함해 업무 흐름을 자동화하는 플랫폼', description: '여러 업무 도구를 연결해 자동화 흐름을 만들고, 필요한 단계에서 사람이 검토하거나 승인하도록 구성할 수 있다.', tags: ['자동화', '협업'] },
+  ]),
 ];
