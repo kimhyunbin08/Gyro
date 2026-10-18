@@ -1,7 +1,7 @@
 import express, { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { catalog as liveCatalog } from './catalog.js';
-import { checkServiceHealth } from './services/health-check.service.js';
+import { checkServiceHealth, resolveServiceUrl, startCatalogHealthMonitor } from './services/health-check.service.js';
 import { allShuffleServices, filterByTier, findServiceById, resolveShuffleCatalog } from './shuffles.js';
 import { getServiceImage } from './image-proxy.js';
 
@@ -125,9 +125,9 @@ export function createApp() {
     // imageUrl is rewritten to our own proxy (GET /api/service-image/:id) rather than the
     // catalog's stored screenshot URL: see image-proxy.ts for why hotlinking the original
     // screenshot source showed a generic placeholder instead of real service imagery.
-    const services = checked
+    const services = dedupeCatalog(checked
       .filter((c) => c.health.status === 'healthy')
-      .map((c) => ({ ...c.service, imageUrl: `/api/service-image/${c.service.id}`, health: c.health }));
+      .map((c) => ({ ...c.service, serviceUrl: c.health.resolvedUrl, imageUrl: `/api/service-image/${c.service.id}`, health: c.health })));
     res.json({ services });
   });
 
@@ -137,8 +137,10 @@ export function createApp() {
   app.get('/api/service-image/:id', async (req, res) => {
     const service = findServiceById(req.params.id);
     if (!service) return res.status(404).end();
-    const { data, contentType } = await getServiceImage(service.serviceUrl, service.name);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    const health = await checkServiceHealth(service.serviceUrl);
+    if (health.status !== 'healthy') return res.status(503).json({ message: '현재 서비스에 접속할 수 없습니다.' });
+    const { data, contentType } = await getServiceImage(health.resolvedUrl, service.name);
+    res.setHeader('Cache-Control', 'public, no-cache');
     res.setHeader('Content-Type', contentType);
     res.send(data);
   });
@@ -227,7 +229,7 @@ export function createApp() {
       likeCounts.set(serviceId, (likeCounts.get(serviceId) || 0) + 1);
     }
     const ranking = dedupedAllShuffles
-      .map((service) => ({ id: service.id, name: service.name, tagline: service.tagline, serviceUrl: service.serviceUrl, likeCount: likeCounts.get(service.id) || 0 }))
+      .map((service) => ({ id: service.id, name: service.name, tagline: service.tagline, serviceUrl: resolveServiceUrl(service.serviceUrl), likeCount: likeCounts.get(service.id) || 0 }))
       .filter((entry) => entry.likeCount > 0)
       .sort((a, b) => b.likeCount - a.likeCount)
       .slice(0, RANKING_LIMIT);
@@ -260,5 +262,13 @@ export function createApp() {
 
 if (process.env.NODE_ENV !== 'test') {
   const port = Number(process.env.PORT || 3001);
-  createApp().listen(port, '0.0.0.0', () => console.log(`Gyro API listening on ${port}`));
+  const server = createApp().listen(port, '0.0.0.0', () => console.log(`Gyro API listening on ${port}`));
+  const stopMonitor = startCatalogHealthMonitor(allShuffleServices().map((service) => service.serviceUrl));
+  server.on('close', stopMonitor);
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(signal, () => {
+      stopMonitor();
+      server.close();
+    });
+  }
 }

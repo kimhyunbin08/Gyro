@@ -1,89 +1,106 @@
-// Live reachability check for Vibe Venture showcase services.
-//
-// prd.md §9 item 5 requires each service's live reachability state to be
-// verified server-side, and requires that only services which pass
-// a recent health check are exposed to the swipe deck. Previously this was
-// a static `{ status: 'healthy' }` stub regardless of whether the exhibited
-// site actually responded, so a dead/decommissioned student project would
-// still show up as a swipeable card with a dead link.
-//
-// Results are cached per URL with a TTL so a burst of requests (e.g. many
-// concurrent visitors) doesn't re-check every live site on every call, and
-// a stale cache entry is served immediately while a refresh happens in the
-// background (stale-while-revalidate) so `/api/services` stays fast.
-
 export type HealthStatus = 'healthy' | 'unhealthy';
-export type HealthCheckResult = { status: HealthStatus; checkedAt: string };
+export type HealthCheckResult = {
+  status: HealthStatus;
+  checkedAt: string;
+  sourceUrl: string;
+  resolvedUrl: string;
+  urlChanged: boolean;
+  httpStatus?: number;
+  error?: string;
+};
 
-const CACHE_TTL_MS = 10 * 60 * 1000;
+export const HEALTH_CHECK_INTERVAL_MS = 10 * 60 * 1000;
 const CHECK_TIMEOUT_MS = 4000;
-
 type CacheEntry = HealthCheckResult & { expiresAt: number };
-
 const cache = new Map<string, CacheEntry>();
 const inFlight = new Map<string, Promise<HealthCheckResult>>();
 
-async function pingUrl(url: string): Promise<HealthStatus> {
+async function refresh(sourceUrl: string): Promise<HealthCheckResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
+  let result: HealthCheckResult;
   try {
-    // HEAD first (cheaper); some static hosts reject HEAD, so fall back to GET.
-    let res = await fetch(url, { method: 'HEAD', redirect: 'follow', signal: controller.signal });
-    if (res.status === 405 || res.status === 501) {
-      res = await fetch(url, { method: 'GET', redirect: 'follow', signal: controller.signal });
+    let response = await fetch(sourceUrl, { method: 'HEAD', redirect: 'follow', signal: controller.signal });
+    if (response.status === 405 || response.status === 501) {
+      await response.body?.cancel();
+      response = await fetch(sourceUrl, { method: 'GET', redirect: 'follow', signal: controller.signal });
     }
-    return res.ok ? 'healthy' : 'unhealthy';
-  } catch {
-    return 'unhealthy';
+    await response.body?.cancel();
+    const destination = new URL(response.url || sourceUrl);
+    if (!['http:', 'https:'].includes(destination.protocol) || destination.username || destination.password) {
+      throw new Error('Invalid redirect destination');
+    }
+    const resolvedUrl = response.ok ? destination.href : sourceUrl;
+    result = {
+      status: response.ok ? 'healthy' : 'unhealthy',
+      checkedAt: new Date().toISOString(),
+      sourceUrl,
+      resolvedUrl,
+      urlChanged: response.ok && resolvedUrl !== new URL(sourceUrl).href,
+      httpStatus: response.status,
+    };
+  } catch (error) {
+    result = {
+      status: 'unhealthy',
+      checkedAt: new Date().toISOString(),
+      sourceUrl,
+      resolvedUrl: sourceUrl,
+      urlChanged: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   } finally {
     clearTimeout(timeout);
   }
-}
-
-async function refresh(url: string): Promise<HealthCheckResult> {
-  const status = await pingUrl(url);
-  const result: HealthCheckResult = { status, checkedAt: new Date().toISOString() };
-  cache.set(url, { ...result, expiresAt: Date.now() + CACHE_TTL_MS });
+  cache.set(sourceUrl, { ...result, expiresAt: Date.now() + HEALTH_CHECK_INTERVAL_MS });
   return result;
 }
 
-/**
- * Starts (or reuses) an in-flight live check for `url` without making the
- * caller wait for it.
- */
-function refreshInBackground(url: string): void {
-  if (inFlight.has(url)) return;
-  const promise = refresh(url).finally(() => inFlight.delete(url));
-  inFlight.set(url, promise);
-  promise.catch(() => {
-    /* refresh() itself never rejects; this guards against unhandled rejection noise. */
-  });
+export async function checkServiceHealth(sourceUrl: string, force = false): Promise<HealthCheckResult> {
+  if (process.env.NODE_ENV === 'test') {
+    return { status: 'healthy', checkedAt: new Date().toISOString(), sourceUrl, resolvedUrl: sourceUrl, urlChanged: false };
+  }
+  const pending = inFlight.get(sourceUrl);
+  if (pending) return pending;
+  const cached = cache.get(sourceUrl);
+  if (!force && cached && cached.expiresAt > Date.now()) return cached;
+  const promise = refresh(sourceUrl).finally(() => inFlight.delete(sourceUrl));
+  inFlight.set(sourceUrl, promise);
+  return promise;
 }
 
-/**
- * Returns the cached health result for `url` when one exists — fresh cache
- * hits are served as-is, and an expired entry is still served immediately
- * (stale) while a refresh is kicked off in the background, so a burst of
- * visitors after the 10-minute TTL never blocks on live network checks.
- * Only a URL with no cache entry at all blocks on (and dedupes concurrent)
- * live checks. Unit/integration tests run with `NODE_ENV=test` and never hit
- * the network: every service is treated as healthy so suites stay
- * deterministic and offline-friendly.
- */
-export async function checkServiceHealth(url: string): Promise<HealthCheckResult> {
-  if (process.env.NODE_ENV === 'test') {
-    return { status: 'healthy', checkedAt: new Date().toISOString() };
+export function resolveServiceUrl(sourceUrl: string): string {
+  const result = cache.get(sourceUrl);
+  return result?.status === 'healthy' ? result.resolvedUrl : sourceUrl;
+}
+
+/** Checks the original URLs even when nobody is browsing; never overlaps sweeps. */
+export function startCatalogHealthMonitor(urls: string[]): () => void {
+  const uniqueUrls = [...new Set(urls)];
+  let running = false;
+  let stopped = false;
+  async function sweep(): Promise<void> {
+    if (running || stopped) return;
+    running = true;
+    let index = 0;
+    try {
+      await Promise.all(Array.from({ length: Math.min(5, uniqueUrls.length) }, async () => {
+        while (!stopped && index < uniqueUrls.length) {
+          const url = uniqueUrls[index++];
+          const result = await checkServiceHealth(url, true);
+          if (result.status === 'unhealthy' || result.urlChanged) {
+            console.info('Catalog health check', result);
+          }
+        }
+      }));
+    } finally {
+      running = false;
+    }
   }
-  const cached = cache.get(url);
-  if (cached) {
-    if (cached.expiresAt <= Date.now()) refreshInBackground(url);
-    return cached;
-  }
-  const pending = inFlight.get(url);
-  if (pending) return pending;
-  const promise = refresh(url).finally(() => inFlight.delete(url));
-  inFlight.set(url, promise);
-  return promise;
+  const run = () => { void sweep().catch((error: unknown) => console.error('Catalog health monitor failed', error)); };
+  run();
+  const timer = setInterval(run, HEALTH_CHECK_INTERVAL_MS);
+  timer.unref();
+  return () => { stopped = true; clearInterval(timer); };
 }
 
 export function clearHealthCheckCacheForTests(): void {

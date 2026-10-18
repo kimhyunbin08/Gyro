@@ -9,6 +9,8 @@ describe('checkServiceHealth', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
     globalThis.fetch = originalFetch;
     process.env.NODE_ENV = originalEnv;
   });
@@ -42,7 +44,7 @@ describe('checkServiceHealth', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('serves a stale cache entry immediately past the TTL instead of blocking on a new live check', async () => {
+  it('rechecks expired entries before exposing a dead service and recovers on the next check', async () => {
     process.env.NODE_ENV = 'production';
     vi.useFakeTimers();
     try {
@@ -62,18 +64,90 @@ describe('checkServiceHealth', () => {
       fetchMock.mockResolvedValue({ ok: false, status: 503 });
 
       const second = await checkServiceHealth('https://stale-after-ttl.example');
-      // The expired-but-stale value is returned synchronously (no new network
-      // call has resolved yet), proving the call didn't block on a live check.
-      expect(second.status).toBe('healthy');
-
-      // Let the background refresh (kicked off as a microtask) settle.
-      await vi.runAllTimersAsync();
+      expect(second.status).toBe('unhealthy');
       expect(fetchMock).toHaveBeenCalledTimes(2);
 
       const third = await checkServiceHealth('https://stale-after-ttl.example');
       expect(third.status).toBe('unhealthy');
+      vi.advanceTimersByTime(10 * 60 * 1000);
+      fetchMock.mockResolvedValue({ ok: true, status: 200 });
+      expect((await checkServiceHealth('https://stale-after-ttl.example')).status).toBe('healthy');
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('records a successful redirect, shares concurrent checks and keeps checking the original URL', async () => {
+    process.env.NODE_ENV = 'production';
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, url: 'https://new.example/app' });
+    globalThis.fetch = fetchMock;
+    const { checkServiceHealth, resolveServiceUrl } = await import('../src/services/health-check.service.js');
+    const [first, concurrent] = await Promise.all([
+      checkServiceHealth('https://old.example'),
+      checkServiceHealth('https://old.example'),
+    ]);
+    expect(first).toEqual(concurrent);
+    expect(first).toMatchObject({ sourceUrl: 'https://old.example', resolvedUrl: 'https://new.example/app', urlChanged: true, httpStatus: 200 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(resolveServiceUrl('https://old.example')).toBe('https://new.example/app');
+    fetchMock.mockResolvedValue({ ok: false, status: 404, url: 'https://new.example/app' });
+    expect((await checkServiceHealth('https://old.example', true)).resolvedUrl).toBe('https://old.example');
+    expect(fetchMock.mock.calls[1][0]).toBe('https://old.example');
+    expect(resolveServiceUrl('https://old.example')).toBe('https://old.example');
+  });
+
+  it('reports a timeout as unhealthy and cancels GET bodies after a HEAD 501 fallback', async () => {
+    process.env.NODE_ENV = 'production';
+    vi.useFakeTimers();
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 501 })
+      .mockResolvedValueOnce({ ok: true, status: 200, body: { cancel } });
+    const { checkServiceHealth } = await import('../src/services/health-check.service.js');
+    expect((await checkServiceHealth('https://fallback.example')).status).toBe('healthy');
+    expect(cancel).toHaveBeenCalledOnce();
+    globalThis.fetch = vi.fn((_url, options) => new Promise((_resolve, reject) => {
+      options?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+    }));
+    const pending = checkServiceHealth('https://timeout.example');
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(await pending).toMatchObject({ status: 'unhealthy', error: 'aborted' });
+  });
+
+  it('checks all unique URLs at startup and every ten minutes without visitor requests, then stops', async () => {
+    process.env.NODE_ENV = 'production';
+    vi.useFakeTimers();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    globalThis.fetch = fetchMock;
+    const { startCatalogHealthMonitor, checkServiceHealth, HEALTH_CHECK_INTERVAL_MS } = await import('../src/services/health-check.service.js');
+    const stop = startCatalogHealthMonitor(['https://a.example', 'https://a.example', 'https://b.example']);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockResolvedValue({ ok: false, status: 503 });
+    await vi.advanceTimersByTimeAsync(HEALTH_CHECK_INTERVAL_MS);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect((await checkServiceHealth('https://a.example')).status).toBe('unhealthy');
+    expect(console.info).toHaveBeenCalled();
+    stop();
+    await vi.advanceTimersByTimeAsync(HEALTH_CHECK_INTERVAL_MS * 2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('limits sweep concurrency to five and does not overlap a slow sweep', async () => {
+    process.env.NODE_ENV = 'production';
+    vi.useFakeTimers();
+    const complete: Array<(value: Response) => void> = [];
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => complete.push(resolve)));
+    globalThis.fetch = fetchMock;
+    const { startCatalogHealthMonitor, HEALTH_CHECK_INTERVAL_MS } = await import('../src/services/health-check.service.js');
+    const stop = startCatalogHealthMonitor(Array.from({ length: 8 }, (_, index) => `https://example.com/${index}`));
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    await vi.advanceTimersByTimeAsync(HEALTH_CHECK_INTERVAL_MS);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    stop();
+    for (const resolve of complete) resolve(new Response(null, { status: 200 }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 });

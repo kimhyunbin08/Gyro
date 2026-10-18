@@ -29,7 +29,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
   properties: {
     managedEnvironmentId: environment.id
     configuration: { ingress: { external: true, targetPort: 3001, transport: 'http', allowInsecure: false }, registries: [{ server: registry.properties.loginServer, identity: 'system' }] }
-    template: { containers: [{ name: 'api', image: apiImage, env: [{ name: 'WEB_ORIGIN', value: webOrigin }], probes: [{ type: 'Liveness', httpGet: { path: '/health', port: 3001 }, initialDelaySeconds: 10, periodSeconds: 30 }] }] }
+    template: {
+      scale: { minReplicas: 1 }
+      containers: [{ name: 'api', image: apiImage, env: [{ name: 'WEB_ORIGIN', value: webOrigin }], probes: [{ type: 'Liveness', httpGet: { path: '/health', port: 3001 }, initialDelaySeconds: 10, periodSeconds: 30 }] }]
+    }
   }
   tags: { 'azd-service-name': 'api' }
 }
