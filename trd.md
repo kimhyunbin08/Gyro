@@ -172,10 +172,26 @@ flowchart LR
 1. URL당 HEAD 요청을 우선 시도하고, `405`/`501` 응답 시 GET으로 폴백한다.
 2. 성공(`res.ok`)이면 `healthy`, 예외/비정상 상태면 `unhealthy`로 기록한다.
 3. 결과는 10분 TTL로 메모리 캐시하며, 동시 요청은 하나의 in-flight Promise를 공유해 중복 호출을
-   막는다.
+   막는다. 만료 캐시는 재검증이 끝나기 전까지 반환하지 않는다.
 4. `NODE_ENV=test`에서는 네트워크 호출 없이 항상 `healthy`를 반환해, 테스트 스위트가 결정적이고
    오프라인에서도 동작하도록 한다.
-5. 웹 클라이언트는 사용자가 고른 테마 카탈로그만 백그라운드 사전 로드하고, 5분간 결과를 메모리에
+5. `startCatalogHealthMonitor()`는 실제 서버 기동 시 전체 셔플의 고유 원본 URL을 즉시 점검하고
+   10분 간격으로 캐시를 강제 갱신한다. 최대 5개 worker, 회차 중첩 금지, 요청당 4초 제한
+   (HEAD→GET 전체 포함), 응답 본문 취소로 불필요한 다운로드를 막는다. 서버 종료/종료 시그널에서
+   타이머를 해제한다. 실패·URL 이동 결과와 점검 자체의 예외는 서버 로그에 기록한다.
+6. 정상 응답의 `Response.url`을 `resolvedUrl`로 저장하며 HTTP(S)/자격증명 없는 URL만 반영한다.
+   실패 시 원본 URL을 유지하고 `httpStatus` 또는 `error`를 기록한다. 매 회차 원본 URL부터
+   다시 확인하므로 이전 이동 주소에 고착되지 않는다. 리다이렉트는 fetch의 기본 추적 제한을 따른다.
+7. `/api/services`는 `resolvedUrl`을 `serviceUrl`로 반환하고 최종 URL 기준으로도 중복 제거한다.
+   결과·미리보기는 이 링크를 그대로 사용한다. 랭킹은 최신 정상 캐시의 링크를 사용하되 기존의
+   역대 집계 정책을 유지한다. 이미지 프록시는 헬스체크 후 최종 URL로 스크린샷을 요청하고,
+   비정상 서비스에는 503을 반환한다. 이미지 디스크 캐시 키도 최종 URL에 따라 분리된다.
+   이미지 응답은 `Cache-Control: public, no-cache`로 재검증해 같은 ID의 이전 URL 이미지가
+   브라우저 캐시에 하루 동안 고정되지 않도록 한다(스크린샷 디스크 캐시는 재사용).
+8. 상태는 프로세스별 인메모리이며 재시작 시 재확인한다. 분산 단일 스케줄러나 영속 이력은 없다.
+   `infra/main.bicep`의 API `minReplicas: 1`로 scale-to-zero를 방지한다. 서버가 중지된 기간의
+   점검은 수행되지 않으며, 다중 복제본에서는 각 복제본이 독립 점검한다.
+9. 웹 클라이언트는 사용자가 고른 테마 카탈로그만 백그라운드 사전 로드하고, 5분간 결과를 메모리에
    보관한다. 티어 선택은 로컬 필터링으로 처리하며, 헬스체크 결과는 서버의 기존 10분 캐시를
    재사용한다.
 
@@ -212,7 +228,13 @@ type CatalogService = {
 
 ### 6.2 API 응답의 `Service` (health 필드 포함)
 ```ts
-type Service = CatalogService & { health: { status: 'healthy' | 'unhealthy'; checkedAt: string } };
+type Service = CatalogService & {
+  health: {
+    status: 'healthy' | 'unhealthy'; checkedAt: string;
+    sourceUrl: string; resolvedUrl: string; urlChanged: boolean;
+    httpStatus?: number; error?: string;
+  };
+};
 ```
 `/api/services`는 `unhealthy` 서비스를 필터링하므로 실제로는 항상 `status: 'healthy'`만 내려간다.
 

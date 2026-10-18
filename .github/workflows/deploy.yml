@@ -89,7 +89,8 @@ jobs:
       - name: Deploy API revision
         run: |
           az containerapp update -n "$API_APP" -g "$RESOURCE_GROUP" \
-            --image "$ACR_LOGIN_SERVER/gyro/api-production:${{ github.sha }}"
+            --image "$ACR_LOGIN_SERVER/gyro/api-production:${{ github.sha }}" \
+            --min-replicas 1
 
       - name: Deploy Web revision
         run: |
@@ -142,7 +143,8 @@ jobs:
       - name: Deploy API revision
         run: |
           az containerapp update -n "$API_APP" -g "$RESOURCE_GROUP" \
-            --image "$ACR_LOGIN_SERVER/gyro/api-production:${{ github.sha }}"
+            --image "$ACR_LOGIN_SERVER/gyro/api-production:${{ github.sha }}" \
+            --min-replicas 1
 
       - name: Deploy Web revision
         run: |
