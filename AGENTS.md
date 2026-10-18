@@ -70,3 +70,11 @@
 - 변경 시 관련 문서(`prd.md`/`trd.md`) 동시 업데이트를 원칙으로 한다.
 - `ideation.md`의 아이디어를 실제로 구현하기로 할 때는, 먼저 `prd.md`/`trd.md`에 요구사항/기술
   설계로 승격(해당 Phase 2 초안 섹션을 정식 섹션으로 전환)한 뒤에 착수한다.
+
+## 7) UI 테마 규칙
+- ThemeAI 테마 가이드와 규칙: https://themeai-sand.vercel.app/rules.md
+- 웹 앱은 Tailwind가 아닌 Vite/plain CSS이므로 색상·타이포그래피·모서리 값은
+  `apps/web/src/themes/`의 의미 토큰을 사용하고 Tailwind 설정을 추가하지 않는다.
+- 지원 테마는 Paper, Clay, Midnight이며, 선택은 브라우저 로컬 설정으로만 유지한다.
+- 기본 테마는 Midnight다. 공통 고정 메뉴는 "홈", "주제별 탐색", "작업으로 찾기" 용어를 유지하고,
+  UI 폰트는 ThemeAI Geist/Fraunces와 한글 Noto Sans KR 글리프 fallback을 사용한다.

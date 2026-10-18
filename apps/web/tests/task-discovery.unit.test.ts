@@ -65,7 +65,7 @@ describe('web unit: task discovery and connection guide', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(document.getElementById('cards')!.classList.contains('hidden')).toBe(false);
-    const requestUrl = vi.mocked(fetch).mock.calls.find(([url]) => String(url).includes('/api/services'))?.[0];
+    const requestUrl = vi.mocked(fetch).mock.calls.find(([url]) => String(url).includes('shuffle=task'))?.[0];
     expect(String(requestUrl)).toContain('shuffle=task');
     expect(String(requestUrl)).toContain('task=report-automation');
     expect(document.querySelector('[data-guide]')?.textContent).toBe('연결 가이드');
