@@ -3,6 +3,8 @@ apps/*/node_modules
 **/dist
 **/test-results
 apps/*/tests
+!apps/web/tests
+!apps/web/tests/**
 .git
 .github
 .worktrees

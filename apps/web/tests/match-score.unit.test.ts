@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { CatalogService } from '../src/catalog-loader.js';
 
 const indexHtmlPath = join(import.meta.dirname, '..', 'index.html');
 const bodyMarkup = readFileSync(indexHtmlPath, 'utf8').match(/<body>([\s\S]*)<\/body>/)![1];
@@ -29,7 +30,7 @@ describe('web unit: interest/audience-weighted match scoring', () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('{}'))));
     const { matchScore, matchedInterestTags, INTEREST_WEIGHT, AUDIENCE_WEIGHT } = await loadAppModule();
 
-    const service = {
+    const service: CatalogService = {
       id: 'svc-1',
       name: '테스트',
       tagline: '',
@@ -55,9 +56,9 @@ describe('web unit: interest/audience-weighted match scoring', () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('{}'))));
     const { matchScore } = await loadAppModule();
 
-    const bestMatch = { id: 'best', name: '', tagline: '', description: '', imageUrl: '', serviceUrl: '', tags: ['학습', 'AI'], audiences: ['teacher'] };
-    const partialMatch = { id: 'partial', name: '', tagline: '', description: '', imageUrl: '', serviceUrl: '', tags: ['학습'], audiences: ['student'] };
-    const noMatch = { id: 'none', name: '', tagline: '', description: '', imageUrl: '', serviceUrl: '', tags: ['생활'], audiences: ['parent'] };
+    const bestMatch: CatalogService = { id: 'best', name: '', tagline: '', description: '', imageUrl: '', serviceUrl: '', tags: ['학습', 'AI'], audiences: ['teacher'] };
+    const partialMatch: CatalogService = { id: 'partial', name: '', tagline: '', description: '', imageUrl: '', serviceUrl: '', tags: ['학습'], audiences: ['student'] };
+    const noMatch: CatalogService = { id: 'none', name: '', tagline: '', description: '', imageUrl: '', serviceUrl: '', tags: ['생활'], audiences: ['parent'] };
 
     const interests = new Set(['학습', 'AI']);
     const scores = [bestMatch, partialMatch, noMatch].map((s) => matchScore(s, 'teacher', interests));

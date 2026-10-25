@@ -4,6 +4,7 @@ import { createApp } from '../src/server.js';
 import { selectAssistantCandidates } from '../src/assistant-recommendation.js';
 import { allShuffleServices } from '../src/shuffles.js';
 import { AssistantProviderError, generateCopilotReply } from '../src/copilot-provider.js';
+import * as healthChecks from '../src/services/health-check.service.js';
 
 vi.mock('../src/copilot-provider.js', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/copilot-provider.js')>(),
@@ -23,6 +24,7 @@ describe('POST /api/assistant/chat', () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
   it('rejects malformed chat requests', async () => {
@@ -59,6 +61,7 @@ describe('POST /api/assistant/chat', () => {
       reply: '현재 도구와 연결할 수 있는 후보예요.',
       recommendations: [
         { serviceId: candidate.id, reason: '문제와 관련된 자동화 기능이 있어요.' },
+        { serviceId: candidate.id, reason: '동일 항목 중복' },
         { serviceId: 'not-in-catalog', reason: '존재하지 않는 서비스' },
       ],
     }));
@@ -76,6 +79,7 @@ describe('POST /api/assistant/chat', () => {
       }
       return new Response('not found', { status: 404 });
     });
+
     globalThis.fetch = fetchMock as typeof fetch;
 
     const response = await request(app).post('/api/assistant/chat').send({
@@ -98,6 +102,53 @@ describe('POST /api/assistant/chat', () => {
     );
   });
 
+  it('accepts prior assistant replies up to the generated 2500-character limit', async () => {
+    vi.mocked(generateCopilotReply).mockResolvedValue(JSON.stringify({ reply: '다음 질문이에요.', recommendations: [] }));
+    const response = await request(createApp()).post('/api/assistant/chat').send({
+      messages: [
+        { role: 'user', content: '업무를 도와줘요.' },
+        { role: 'assistant', content: '가'.repeat(2500) },
+        { role: 'user', content: '다른 후보도 알려줘요.' },
+      ],
+    });
+    expect(response.status).toBe(200);
+  });
+
+  it('checks health and final URL deduplication before presenting candidates to the model', async () => {
+    vi.spyOn(healthChecks, 'checkServiceHealth').mockImplementation(async (sourceUrl) => ({
+      status: sourceUrl === allShuffleServices()[0].serviceUrl ? 'unhealthy' : 'healthy',
+      checkedAt: '2026-10-25T00:00:00.000Z', sourceUrl,
+      resolvedUrl: 'https://merged.example/', urlChanged: true,
+    }));
+    vi.mocked(generateCopilotReply).mockResolvedValue(JSON.stringify({ reply: '확인했어요.', recommendations: [] }));
+    expect((await request(createApp()).post('/api/assistant/chat').send({
+      messages: [{ role: 'user', content: '도구를 찾아줘요.' }],
+    })).status).toBe(200);
+    const prompt = vi.mocked(generateCopilotReply).mock.calls[0][0];
+    const line = prompt.split('\n').find((item) => item.startsWith('후보 카탈로그 JSON: '))!;
+    const candidates = JSON.parse(line.slice('후보 카탈로그 JSON: '.length));
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].id).not.toBe(allShuffleServices()[0].id);
+  });
+
+  it.each(['private', 'oversized', 'malformed'])('rejects %s public repository data before sending it to Copilot', async (failure) => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (failure === 'oversized') return new Response('x'.repeat(64 * 1024 + 1));
+      if (url.endsWith('/languages')) return new Response('{}');
+      if (url.endsWith('/readme')) return new Response(JSON.stringify({ encoding: 'base64', content: 'SGk=' }));
+      return new Response(JSON.stringify({
+        private: failure === 'private' ? true : 'false', description: 'project',
+      }));
+    });
+    const response = await request(createApp()).post('/api/assistant/chat').send({
+      messages: [{ role: 'user', content: '공개 저장소에 맞는 도구를 찾아줘요.' }],
+      repoUrl: 'https://github.com/sample/project',
+    });
+    expect(response.status).toBe(400);
+    expect(generateCopilotReply).not.toHaveBeenCalled();
+  });
+
   it('rejects non-GitHub repository URLs without fetching them', async () => {
     const fetchMock = vi.fn();
     globalThis.fetch = fetchMock as typeof fetch;
@@ -107,6 +158,21 @@ describe('POST /api/assistant/chat', () => {
     });
     expect(response.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('enforces role-specific message limits and preserves CORS on oversized JSON errors', async () => {
+    const isolated = createApp();
+    for (const [role, size] of [['user', 1501], ['assistant', 2501]] as const) {
+      expect((await request(isolated).post('/api/assistant/chat').send({
+        messages: [{ role, content: 'a'.repeat(size) }],
+      })).status).toBe(400);
+    }
+    const response = await request(isolated).post('/api/assistant/chat').send({
+      messages: [{ role: 'user', content: '가'.repeat(12000) }],
+    });
+    expect(response.status).toBe(413);
+    expect(response.headers['access-control-allow-origin']).toBe('*');
+    expect(generateCopilotReply).not.toHaveBeenCalled();
   });
 
   it('rejects malformed model output and reports provider failures without leaking credentials', async () => {

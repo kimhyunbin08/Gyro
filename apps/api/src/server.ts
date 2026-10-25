@@ -1,6 +1,5 @@
 import express, { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
-import { catalog as liveCatalog } from './catalog.js';
 import { checkServiceHealth, resolveServiceUrl, startCatalogHealthMonitor } from './services/health-check.service.js';
 import { allShuffleServices, filterByTier, findServiceById, resolveShuffleCatalog } from './shuffles.js';
 import { getServiceImage } from './image-proxy.js';
@@ -14,8 +13,8 @@ import {
   parseAssistantRequest,
 } from './assistant-recommendation.js';
 import { copilotConfiguration, isLocalAssistantRequest } from './copilot-provider.js';
+import { dedupeCatalog, healthyCatalog } from './services/discovery-catalog.js';
 
-type Audience = 'student' | 'teacher' | 'parent' | 'other';
 type EventName =
   | 'landing_view'
   | 'profile_submit'
@@ -31,35 +30,6 @@ type EventName =
 
 const RANKING_LIMIT = 20;
 
-type Service = {
-  id: string;
-  name: string;
-  tagline: string;
-  description: string;
-  imageUrl: string;
-  serviceUrl: string;
-  tags: string[];
-  audiences: Audience[];
-  kind?: 'product' | 'service' | 'skill' | 'mcp';
-  tasks?: string[];
-  connection?: {
-    agents: { name: string; versionNote?: string }[];
-    transport?: 'stdio' | 'http' | 'sse';
-    runtime?: 'local' | 'remote';
-    auth?: 'none' | 'api_key' | 'oauth' | 'unknown';
-    permissions: string[];
-    installSteps: string[];
-    exampleUsage?: string;
-    docsUrl: string;
-  };
-  verification?: { level: 'link' | 'docs' | 'install'; verifiedAt?: string; environment?: string; sources: string[] };
-  pricing?: { model: 'free' | 'freemium' | 'paid' | 'unknown'; note?: string; verifiedAt?: string; source?: string };
-  health: { status: 'healthy'; checkedAt: string };
-};
-
-const events: Array<{ name: EventName; sessionId: string; metadata: Record<string, unknown>; createdAt: string }> = [];
-const emailLeads = new Set<string>();
-const assistantRateLimits = new Map<string, { count: number; resetAt: number }>();
 const eventSchema = z
   .object({
     name: z.enum([
@@ -93,6 +63,9 @@ const eventSchema = z
       if (metadata.reason !== undefined && !reasons.includes(String(metadata.reason))) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'reason 값이 올바르지 않습니다.', path: ['metadata', 'reason'] });
       }
+      if (metadata.outcome === 'success' && metadata.reason !== undefined) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: '성공 결과에는 실패 이유를 포함할 수 없습니다.', path: ['metadata', 'reason'] });
+      }
       if (metadata.agent !== undefined && (typeof metadata.agent !== 'string' || metadata.agent.length > 80)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'agent는 80자 이하 문자열이어야 합니다.', path: ['metadata', 'agent'] });
       }
@@ -116,24 +89,6 @@ const emailSchema = z.object({
   updatesOptIn: z.boolean(),
 });
 
-function normalizeServiceUrl(url: string): string {
-  return url.trim().toLowerCase().replace(/\/+$/, '');
-}
-
-// The source catalog occasionally lists the same project across multiple
-// exhibit months (resubmitted with no changes), which would otherwise show
-// the identical card twice in one swipe session. Keep only the first
-// occurrence per unique live URL.
-function dedupeCatalog(services: typeof liveCatalog): typeof liveCatalog {
-  const seen = new Set<string>();
-  return services.filter((service) => {
-    const key = normalizeServiceUrl(service.serviceUrl);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
 // 랭킹·퍼널 집계는 셔플을 구분하지 않고 기존 카탈로그와 작업 카탈로그 전체를 대상으로 한다.
 // 셔플 간 URL 중복도 동일한 dedupe 규칙으로 걸러낸다.
 const dedupedAllShuffles = dedupeCatalog(allShuffleServices());
@@ -143,10 +98,12 @@ function allowedOrigin(): string {
 }
 
 export function createApp() {
+  const events: Array<{ name: EventName; sessionId: string; metadata: Record<string, unknown>; createdAt: string }> = [];
+  const emailLeads = new Set<string>();
+  const assistantRateLimits = new Map<string, { count: number; resetAt: number }>();
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
-  app.use(express.json({ limit: '32kb' }));
   app.use((_req: Request, res: Response, next: NextFunction) => {
     res.header('Access-Control-Allow-Origin', allowedOrigin());
     res.header('Vary', 'Origin');
@@ -155,6 +112,7 @@ export function createApp() {
     if (_req.method === 'OPTIONS') return res.sendStatus(204);
     next();
   });
+  app.use(express.json({ limit: '32kb' }));
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok', service: 'gyro-api', timestamp: new Date().toISOString() });
@@ -169,16 +127,7 @@ export function createApp() {
     const source = dedupeCatalog(filterByTier(resolveShuffleCatalog(req.query.shuffle), req.query.tier))
       .filter((service) => !taskFilter || service.tasks?.includes(taskFilter))
       .filter((service) => !kindFilter || (service.kind ?? 'service') === kindFilter);
-    const checked = await Promise.all(
-      source.map(async (service) => ({ service, health: await checkServiceHealth(service.serviceUrl) }))
-    );
-    // prd.md §9 item 5: only services that pass a recent health check reach the swipe deck.
-    // imageUrl is rewritten to our own proxy (GET /api/service-image/:id) rather than the
-    // catalog's stored screenshot URL: see image-proxy.ts for why hotlinking the original
-    // screenshot source showed a generic placeholder instead of real service imagery.
-    const services = dedupeCatalog(checked
-      .filter((c) => c.health.status === 'healthy')
-      .map((c) => ({ ...c.service, serviceUrl: c.health.resolvedUrl, imageUrl: c.service.imageUrl ? `/api/service-image/${c.service.id}` : '', health: c.health })));
+    const services = await healthyCatalog(source);
     res.json({ services });
   });
 
@@ -210,25 +159,16 @@ export function createApp() {
       if (configuration.local && !isLocalAssistantRequest(req.socket.remoteAddress, req.get('host'), req.get('origin'))) {
         return res.status(403).json({ message: '개인 Copilot 추천은 로컬 개발 요청만 허용합니다.' });
       }
-      const { result, repository } = await getAssistantRecommendation(input, dedupedAllShuffles);
-      const recommendations = await Promise.all(result.recommendations.map(async (recommendation) => {
-        const service = dedupedAllShuffles.find((item) => item.id === recommendation.serviceId);
-        if (!service) return undefined;
-        const health = await checkServiceHealth(service.serviceUrl);
-        if (health.status !== 'healthy') return undefined;
-        return {
-          reason: recommendation.reason,
-          service: {
-            ...service,
-            serviceUrl: health.resolvedUrl,
-            imageUrl: service.imageUrl ? `/api/service-image/${service.id}` : '',
-            health,
-          },
-        };
-      }));
+      const candidates = await healthyCatalog(dedupedAllShuffles);
+      const { result, repository } = await getAssistantRecommendation(input, candidates);
+      const byId = new Map(candidates.map((service) => [service.id, service]));
+      const recommendations = result.recommendations.flatMap(({ serviceId, reason }) => {
+        const service = byId.get(serviceId);
+        return service ? [{ reason, service }] : [];
+      });
       res.json({
         reply: result.reply,
-        recommendations: recommendations.filter((item): item is NonNullable<typeof item> => Boolean(item)),
+        recommendations,
         ...(repository ? { analyzedRepository: { url: repository.url, languages: repository.languages } } : {}),
       });
     } catch (error) {
@@ -335,7 +275,14 @@ export function createApp() {
           skips: s?.skips || 0,
           previewClicks: s?.previewClicks || 0,
           docClicks: s?.docClicks || 0,
-          connection: s?.connection || { success: 0, partial: 0, fail: 0, reasons: {} },
+          connection: {
+            ...(s?.connection || { success: 0, partial: 0, fail: 0, reasons: {} }),
+            total: (s?.connection.success || 0) + (s?.connection.partial || 0) + (s?.connection.fail || 0),
+            successRate: s && s.connection.success + s.connection.partial + s.connection.fail > 0
+              ? s.connection.success / (s.connection.success + s.connection.partial + s.connection.fail)
+              : null,
+            selfReported: true,
+          },
           dislikeReasons: s?.dislikeReasons || {},
           retryIntent: s?.retryIntent || { yes: 0, no: 0, unsure: 0 },
           dwellBuckets: s?.dwellBuckets || {},
@@ -391,7 +338,10 @@ export function createApp() {
     if (err && typeof err === 'object' && 'type' in err && err.type === 'entity.too.large') {
       return res.status(413).json({ message: '요청이 너무 커요. 메시지와 저장소 입력을 줄여 주세요.' });
     }
-    console.error(err);
+    if (err && typeof err === 'object' && 'type' in err && err.type === 'entity.parse.failed') {
+      return res.status(400).json({ message: '요청 JSON 형식이 올바르지 않습니다.' });
+    }
+    console.error('API request failed.');
     res.status(500).json({ message: '잠시 후 다시 시도해 주세요.' });
   });
   return app;

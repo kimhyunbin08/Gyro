@@ -137,11 +137,54 @@ describe('Gyro discovery API', () => {
 
     const response = await request(app).get('/api/services/funnel');
     const entry = response.body.funnel.find((row: { id: string }) => row.id === service.id);
-    expect(entry.connection).toEqual({ success: 1, partial: 0, fail: 1, reasons: { auth_issue: 1 } });
+    expect(entry.connection).toEqual({
+      success: 1, partial: 0, fail: 1, reasons: { auth_issue: 1 },
+      total: 2, successRate: 0.5, selfReported: true,
+    });
     expect(entry.docClicks).toBe(1);
     expect(entry.previewClicks).toBe(0);
     expect(entry.impressions).toBe(0);
     expect(JSON.stringify(entry)).not.toContain('must-not-be-retained');
+  });
+
+  it('includes partial failures in self-reported totals without counting document clicks as success', async () => {
+    const isolated = createApp();
+    const serviceId = taskCatalog.find((entry) => entry.kind === 'mcp')!.id;
+    const post = (metadata: Record<string, unknown>, name = 'connection_report') =>
+      request(isolated).post('/api/events').send({ name, sessionId: 'partial-report-session', metadata: { serviceId, ...metadata } });
+    expect((await post({ outcome: 'success', reason: 'auth_issue' })).status).toBe(400);
+    await post({ mode: 'guide' }, 'service_click');
+    let row = (await request(isolated).get('/api/services/funnel')).body.funnel[0];
+    expect(row.connection).toMatchObject({ total: 0, successRate: null, selfReported: true });
+    await post({ outcome: 'partial', reason: 'auth_issue' });
+    await post({ outcome: 'success' });
+    row = (await request(isolated).get('/api/services/funnel')).body.funnel[0];
+    expect(row.connection).toMatchObject({ total: 2, successRate: 0.5, partial: 1, reasons: { auth_issue: 1 } });
+    expect(row.docClicks).toBe(1);
+  });
+
+  it('reports malformed JSON as 400 without logging request contents', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await request(createApp()).post('/api/assistant/chat')
+        .set('Content-Type', 'application/json').send('{"privatePrompt":"do-not-log"');
+      expect(response.status).toBe(400);
+      expect(log).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('isolates in-memory event and lead state between API instances', async () => {
+    const first = createApp();
+    const second = createApp();
+    const body = { email: 'isolated@example.com', updatesOptIn: false };
+    expect((await request(first).post('/api/email-leads').send(body)).status).toBe(201);
+    expect((await request(second).post('/api/email-leads').send(body)).status).toBe(201);
+    await request(first).post('/api/events').send({
+      name: 'card_like', sessionId: 'isolated-session', metadata: { serviceId: catalog[0].id },
+    });
+    expect((await request(second).get('/api/services/ranking')).body.ranking).toEqual([]);
   });
 
   it('accepts service feedback metadata and rejects invalid ratings', async () => {

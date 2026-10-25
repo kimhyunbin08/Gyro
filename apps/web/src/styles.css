@@ -1259,6 +1259,7 @@ h2 em {
   display: flex;
   width: 100%;
   height: calc(100dvh - var(--app-header-height));
+  min-height: 0;
   max-width: none;
   align-items: center;
   justify-content: center;
@@ -2033,7 +2034,7 @@ h2 em {
 
   .phone-frame {
     width: min(100%, 460px);
-    height: min(94vh, 900px);
+    height: min(100%, 900px);
     border: 1px solid var(--border);
     border-radius: 28px;
     box-shadow: var(--theme-shadow-lg);
