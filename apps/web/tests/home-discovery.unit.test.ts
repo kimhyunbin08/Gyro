@@ -34,6 +34,16 @@ describe('web unit: home discovery and appearance settings', () => {
     Object.defineProperty(window, 'scrollTo', { configurable: true, value: vi.fn() });
   });
 
+  it('presents the chat prompt first and the discovery explanation below it', () => {
+    mountApp();
+
+    expect(document.getElementById('hero-title')!.textContent).toContain('찾고 있는 AI나 서비스');
+    expect(document.getElementById('assistant-thread')!.children).toHaveLength(0);
+    expect(document.getElementById('explainer-title')!.textContent).toContain('막힌 일을 말하면');
+    expect(document.querySelector('.discovery-explainer')?.nextElementSibling?.classList.contains('home-catalog')).toBe(true);
+    expect([...document.querySelectorAll('[data-primary-nav]')].map((button) => button.textContent?.trim())).toContain('주제별 탐색');
+  });
+
   it('loads searchable service cards immediately and filters by query and kind', async () => {
     vi.stubGlobal('fetch', vi.fn((url: string) => {
       if (url.includes('config.json')) return Promise.resolve(new Response(JSON.stringify({ apiUrl: 'http://localhost:3001' })));
@@ -60,6 +70,50 @@ describe('web unit: home discovery and appearance settings', () => {
     document.querySelector<HTMLButtonElement>('.home-product-preview')!.click();
     expect(document.getElementById('guide-overlay')!.classList.contains('hidden')).toBe(false);
     expect(document.getElementById('preview-overlay')!.classList.contains('hidden')).toBe(true);
+  });
+
+  it('requires Copilot consent and renders catalog-backed chat recommendations', async () => {
+    expect(indexHtml).toContain('GitHub Copilot 및 선택한 모델 제공자');
+    expect(indexHtml).not.toContain('Azure OpenAI');
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('config.json')) return Promise.resolve(new Response(JSON.stringify({ apiUrl: 'http://localhost:3001' })));
+      if (url.includes('/api/services')) return Promise.resolve(new Response(JSON.stringify({ services: sampleServices })));
+      if (url.includes('/api/assistant/chat')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          reply: '회의 일정 연결을 도와주는 후보를 찾았어요.',
+          recommendations: [{ reason: '회의와 일정 정리에 사용할 수 있어요.', service: sampleServices[2] }],
+        })));
+      }
+      return Promise.resolve(new Response('{}'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await loadAppModule();
+    await flush();
+
+    const message = document.getElementById('assistant-message') as HTMLTextAreaElement;
+    const form = document.getElementById('assistant-form')!;
+    message.value = '회의 일정을 정리하기 어려워요.';
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/api/assistant/chat'), expect.anything());
+    expect(document.getElementById('assistant-status')!.textContent).toContain('동의');
+
+    (document.getElementById('assistant-consent') as HTMLInputElement).checked = true;
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3001/api/assistant/chat',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(document.getElementById('assistant-thread')!.textContent).toContain('회의 일정 연결을 도와주는 후보');
+    expect(document.getElementById('assistant-thread')!.textContent).toContain('Calendar MCP');
+    expect(document.getElementById('assistant-thread')!.textContent).toContain('요금 확인 필요');
+    expect(document.getElementById('landing')!.classList.contains('has-assistant-conversation')).toBe(true);
+
+    document.getElementById('assistant-reset')!.click();
+    expect(document.getElementById('landing')!.classList.contains('has-assistant-conversation')).toBe(false);
+    expect(document.getElementById('assistant-thread')!.children).toHaveLength(0);
   });
 
   it('switches and saves one of the three configured themes', async () => {
@@ -110,7 +164,7 @@ describe('web unit: home discovery and appearance settings', () => {
 
     (document.getElementById('discover-nav') as HTMLButtonElement).click();
     expect(document.getElementById('landing')!.classList.contains('hidden')).toBe(false);
-    expect(document.activeElement).toBe(document.getElementById('service-search'));
+    expect(document.activeElement).toBe(document.getElementById('assistant-message'));
     await flush();
   });
 });

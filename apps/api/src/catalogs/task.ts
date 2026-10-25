@@ -85,9 +85,3 @@ export type TaskId = (typeof TASK_OPTIONS)[number]['id'];
 export function isTaskId(value: unknown): value is TaskId {
   return typeof value === 'string' && TASK_OPTIONS.some((task) => task.id === value);
 }
-
-export const CATALOG_TASK_ENTRY_COUNT = taskCatalog.length;
-
-if (taskCatalog.length < 20 || taskCatalog.length > 30) {
-  throw new Error(`작업 카탈로그는 20~30개여야 합니다. 현재 ${taskCatalog.length}개입니다.`);
-}

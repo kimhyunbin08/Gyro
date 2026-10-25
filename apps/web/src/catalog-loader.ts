@@ -25,6 +25,7 @@ export type CatalogService = {
     docsUrl: string;
   };
   verification?: { level: 'link' | 'docs' | 'install'; verifiedAt?: string; environment?: string; sources: string[] };
+  pricing?: { model: 'free' | 'freemium' | 'paid' | 'unknown'; note?: string; verifiedAt?: string; source?: string };
 };
 
 const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Gyro에서 내가 필요한 서비스를 검색하고 주제별·작업별로 발견하세요." />
+    <meta name="description" content="해결하고 싶은 문제를 말하고, 나에게 맞는 서비스·스킬·MCP를 대화형 AI로 찾아보세요." />
     <meta name="theme-color" content="#111827" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -34,43 +34,61 @@
           </div>
         </div>
       </header>
-      <section class="shell" id="landing" aria-labelledby="hero-title">
+      <section class="shell landing-shell" id="landing" aria-labelledby="hero-title">
         <div class="landing-hero">
           <div class="landing-copy">
-            <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span>GYRO · 서비스 발견</p>
-            <h1 id="hero-title">내가 필요한<br /><em>서비스를 찾아요.</em></h1>
-            <p class="lede">필요한 도구를 바로 검색하거나, 카드 한 장씩 넘기며 나에게 맞는 서비스를 찾아보세요.</p>
-            <div class="hero-actions">
-              <button class="button button-primary" id="start-button">맞춤 서비스 찾기 <span aria-hidden="true">→</span></button>
-              <p class="privacy-note">로그인 없이 바로 시작할 수 있어요.</p>
-            </div>
+            <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span>GYRO · AI 서비스 발견</p>
+            <h1 id="hero-title">찾고 있는 AI나 서비스,<br /><em>해결하고 싶은 문제를 설명해보세요.</em></h1>
           </div>
 
-          <section class="home-search-panel" aria-labelledby="search-title">
-            <div class="search-panel-heading">
-              <div><p class="eyebrow">찾고 있는 게 있나요?</p><h2 id="search-title">서비스 검색</h2></div>
-              <span class="search-shortcut" aria-hidden="true">⌕</span>
+          <section class="home-assistant-panel" aria-labelledby="assistant-title">
+            <div class="assistant-heading">
+              <div><p class="eyebrow">GYRO AI · 문제에서 시작하기</p><h2 id="assistant-title">찾고 있는 도구를 함께 찾아볼게요.</h2></div>
+              <button class="assistant-reset" id="assistant-reset" type="button">새 대화</button>
             </div>
-            <form class="search-form" id="home-search-form" role="search">
-              <label class="sr-only" for="service-search">서비스 이름, 기능 또는 관심사를 검색하세요</label>
-              <span class="search-icon" aria-hidden="true">⌕</span>
-              <input id="service-search" type="search" placeholder="예: 디자인, 협업, AI" autocomplete="off" />
-              <button class="search-clear hidden" type="button" id="clear-search" aria-label="검색어 지우기">×</button>
+            <div class="assistant-thread" id="assistant-thread" role="log" aria-live="polite" aria-relevant="additions text"></div>
+            <form class="assistant-form" id="assistant-form">
+              <label class="sr-only" for="assistant-message">해결하고 싶은 문제</label>
+              <textarea id="assistant-message" rows="2" maxlength="1500" placeholder="예: 매주 회의록을 정리하고 할 일로 옮기는 데 시간이 너무 오래 걸려요." required></textarea>
+              <details class="assistant-context">
+                <summary>기술 스택·공개 GitHub 저장소 추가하기 (선택)</summary>
+                <label for="assistant-tech-stack">현재 사용하는 서비스와 기술</label>
+                <input id="assistant-tech-stack" type="text" maxlength="500" placeholder="예: React, Notion, Slack" />
+                <label for="assistant-repo-url">공개 GitHub 저장소</label>
+                <input id="assistant-repo-url" type="url" maxlength="300" placeholder="https://github.com/owner/repo" />
+                <small>공개 저장소의 설명·언어·README만 읽어요. 코드는 실행하지 않으며 비공개 저장소는 지원하지 않아요.</small>
+              </details>
+              <label class="assistant-consent"><input id="assistant-consent" type="checkbox" /><span>입력한 내용과 선택한 공개 저장소 정보를 GitHub Copilot 및 선택한 모델 제공자에게 보내 추천을 생성하는 데 동의해요. 비밀번호·API 키·개인정보는 입력하지 마세요.</span></label>
+              <div class="assistant-form-footer"><p class="assistant-status-message" id="assistant-status" role="status"></p><button class="button button-primary" id="assistant-send" type="submit">서비스 찾기 <span aria-hidden="true">→</span></button></div>
             </form>
-            <p class="search-hint">이름, 소개, 태그로 찾아볼 수 있어요.</p>
-            <div class="search-divider" aria-hidden="true"></div>
-            <div class="quick-actions">
-              <button type="button" class="quick-action" id="browse-categories"><span aria-hidden="true">◫</span><span><strong>주제별 탐색</strong><small>SNS · 생산성 · 게임 등</small></span><span class="quick-arrow" aria-hidden="true">→</span></button>
-              <button type="button" class="quick-action" id="browse-tasks"><span aria-hidden="true">↗</span><span><strong>작업으로 찾기</strong><small>해결할 일에 맞는 도구</small></span><span class="quick-arrow" aria-hidden="true">→</span></button>
-            </div>
+            <p class="assistant-privacy">입력 내용과 README는 GitHub Copilot 및 선택한 모델 제공자에게 전송돼요. 서버의 임시 대화 상태는 요청 종료 시 삭제돼요.</p>
           </section>
         </div>
 
+        <section class="discovery-explainer" aria-labelledby="explainer-title">
+          <div class="discovery-explainer-inner">
+            <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span>GYRO · AI 서비스 발견</p>
+            <h2 id="explainer-title">막힌 일을 말하면<br /><em>맞는 도구를 찾아요.</em></h2>
+            <p class="lede">불편한 점이나 반복되는 일을 알려주세요. 이미 쓰는 서비스와 기술 환경까지 고려해 대안을 함께 찾아볼게요.</p>
+            <div class="hero-actions">
+              <button class="button button-primary" id="start-button">카드로 둘러보기 <span aria-hidden="true">→</span></button>
+              <p class="privacy-note">로그인 없이 대화하고, 원하면 공개 저장소만 연결해요.</p>
+            </div>
+          </div>
+        </section>
+
         <section class="home-catalog" aria-labelledby="catalog-title">
           <header class="catalog-heading">
-            <div><p class="eyebrow">GYRO에서 골라본</p><h2 id="catalog-title">서비스 둘러보기</h2><p class="catalog-subtitle">새로운 아이디어와 유용한 도구를 찾아보세요.</p></div>
+            <div><p class="eyebrow">직접 둘러보기</p><h2 id="catalog-title">서비스 카탈로그</h2><p class="catalog-subtitle">대화 대신 검색하거나 카드로 발견할 수도 있어요.</p></div>
             <p class="catalog-status" id="home-catalog-status" role="status" aria-live="polite">서비스 목록을 불러오고 있어요.</p>
           </header>
+          <form class="search-form" id="home-search-form" role="search">
+            <label class="sr-only" for="service-search">서비스 이름, 기능 또는 관심사를 검색하세요</label>
+            <span class="search-icon" aria-hidden="true">⌕</span>
+            <input id="service-search" type="search" placeholder="예: 디자인, 협업, AI" autocomplete="off" />
+            <button class="search-clear hidden" type="button" id="clear-search" aria-label="검색어 지우기">×</button>
+          </form>
+          <p class="search-hint">이름, 소개, 태그로 찾아볼 수 있어요.</p>
           <div class="catalog-filters" role="group" aria-label="서비스 유형 필터">
             <button type="button" class="filter-chip selected" data-home-kind="all" aria-pressed="true">전체</button>
             <button type="button" class="filter-chip" data-home-kind="product" aria-pressed="false">제품</button>

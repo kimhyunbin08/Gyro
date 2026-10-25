@@ -39,9 +39,7 @@ jobs:
           npm run build
 
       - name: Run Tests
-        run: |
-          cd apps/api
-          npm run test 2>&1 || echo "Tests skipped"
+        run: npm test
 
   deploy-staging:
     needs: build
@@ -87,7 +85,11 @@ jobs:
             --build-arg VITE_API_URL="$API_URL" .
 
       - name: Deploy API revision
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          COPILOT_MODEL: ${{ vars.COPILOT_MODEL }}
         run: |
+          bash .github/scripts/configure-copilot.sh
           az containerapp update -n "$API_APP" -g "$RESOURCE_GROUP" \
             --image "$ACR_LOGIN_SERVER/gyro/api-production:${{ github.sha }}" \
             --min-replicas 1
@@ -141,7 +143,11 @@ jobs:
             --build-arg VITE_API_URL="$API_URL" .
 
       - name: Deploy API revision
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          COPILOT_MODEL: ${{ vars.COPILOT_MODEL }}
         run: |
+          bash .github/scripts/configure-copilot.sh
           az containerapp update -n "$API_APP" -g "$RESOURCE_GROUP" \
             --image "$ACR_LOGIN_SERVER/gyro/api-production:${{ github.sha }}" \
             --min-replicas 1
