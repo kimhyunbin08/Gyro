@@ -8,10 +8,12 @@ import { isTaskId } from './catalogs/task.js';
 import {
   AssistantConfigurationError,
   AssistantProviderError,
+  AssistantBusyError,
   PublicRepositoryError,
   getAssistantRecommendation,
   parseAssistantRequest,
 } from './assistant-recommendation.js';
+import { copilotConfiguration, isLocalAssistantRequest } from './copilot-provider.js';
 
 type Audience = 'student' | 'teacher' | 'parent' | 'other';
 type EventName =
@@ -204,6 +206,10 @@ export function createApp() {
     const input = parseAssistantRequest(req.body);
     if (!input) return res.status(400).json({ message: '대화 요청 형식이 올바르지 않습니다.' });
     try {
+      const configuration = copilotConfiguration();
+      if (configuration.local && !isLocalAssistantRequest(req.socket.remoteAddress, req.get('host'), req.get('origin'))) {
+        return res.status(403).json({ message: '개인 Copilot 추천은 로컬 개발 요청만 허용합니다.' });
+      }
       const { result, repository } = await getAssistantRecommendation(input, dedupedAllShuffles);
       const recommendations = await Promise.all(result.recommendations.map(async (recommendation) => {
         const service = dedupedAllShuffles.find((item) => item.id === recommendation.serviceId);
@@ -228,6 +234,10 @@ export function createApp() {
     } catch (error) {
       if (error instanceof AssistantConfigurationError) {
         return res.status(503).json({ message: 'AI 추천 기능이 아직 설정되지 않았어요.' });
+      }
+      if (error instanceof AssistantBusyError) {
+        res.setHeader('Retry-After', '5');
+        return res.status(429).json({ message: error.message });
       }
       if (error instanceof PublicRepositoryError) {
         return res.status(400).json({ message: error.message });
@@ -389,7 +399,8 @@ export function createApp() {
 
 if (process.env.NODE_ENV !== 'test') {
   const port = Number(process.env.PORT || 3001);
-  const server = createApp().listen(port, '0.0.0.0', () => console.log(`Gyro API listening on ${port}`));
+  const host = process.env.GYRO_ASSISTANT_PROVIDER === 'copilot-local' ? '127.0.0.1' : '0.0.0.0';
+  const server = createApp().listen(port, host, () => console.log(`Gyro API listening on ${host}:${port}`));
   const stopMonitor = startCatalogHealthMonitor(allShuffleServices().map((service) => service.serviceUrl));
   server.on('close', stopMonitor);
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {

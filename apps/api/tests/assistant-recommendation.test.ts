@@ -1,29 +1,28 @@
 import request from 'supertest';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/server.js';
 import { selectAssistantCandidates } from '../src/assistant-recommendation.js';
 import { allShuffleServices } from '../src/shuffles.js';
+import { AssistantProviderError, generateCopilotReply } from '../src/copilot-provider.js';
+
+vi.mock('../src/copilot-provider.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/copilot-provider.js')>(),
+  generateCopilotReply: vi.fn(),
+}));
 
 describe('POST /api/assistant/chat', () => {
   const app = createApp();
   const originalFetch = globalThis.fetch;
-  const originalEnvironment = {
-    endpoint: process.env.AZURE_OPENAI_ENDPOINT,
-    deployment: process.env.AZURE_OPENAI_DEPLOYMENT,
-    apiKey: process.env.AZURE_OPENAI_API_KEY,
-    apiVersion: process.env.AZURE_OPENAI_API_VERSION,
-  };
+  beforeEach(() => {
+    vi.stubEnv('GYRO_ASSISTANT_PROVIDER', 'copilot');
+    vi.stubEnv('COPILOT_MODEL', 'test-model');
+    vi.stubEnv('COPILOT_GITHUB_TOKEN', 'github_pat_test');
+    vi.mocked(generateCopilotReply).mockReset();
+  });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
-    if (originalEnvironment.endpoint === undefined) delete process.env.AZURE_OPENAI_ENDPOINT;
-    else process.env.AZURE_OPENAI_ENDPOINT = originalEnvironment.endpoint;
-    if (originalEnvironment.deployment === undefined) delete process.env.AZURE_OPENAI_DEPLOYMENT;
-    else process.env.AZURE_OPENAI_DEPLOYMENT = originalEnvironment.deployment;
-    if (originalEnvironment.apiKey === undefined) delete process.env.AZURE_OPENAI_API_KEY;
-    else process.env.AZURE_OPENAI_API_KEY = originalEnvironment.apiKey;
-    if (originalEnvironment.apiVersion === undefined) delete process.env.AZURE_OPENAI_API_VERSION;
-    else process.env.AZURE_OPENAI_API_VERSION = originalEnvironment.apiVersion;
+    vi.unstubAllEnvs();
   });
 
   it('rejects malformed chat requests', async () => {
@@ -35,10 +34,8 @@ describe('POST /api/assistant/chat', () => {
     expect(oversizedMessage.status).toBe(400);
   });
 
-  it('returns an explicit unavailable response when Azure is not configured', async () => {
-    delete process.env.AZURE_OPENAI_ENDPOINT;
-    delete process.env.AZURE_OPENAI_DEPLOYMENT;
-    delete process.env.AZURE_OPENAI_API_KEY;
+  it('returns an explicit unavailable response when Copilot is not configured', async () => {
+    vi.stubEnv('COPILOT_GITHUB_TOKEN', '');
     const response = await request(app).post('/api/assistant/chat').send({
       messages: [{ role: 'user', content: '회의록 정리가 어려워요.' }],
     });
@@ -47,9 +44,6 @@ describe('POST /api/assistant/chat', () => {
   });
 
   it('analyzes only a public GitHub repository and constrains recommendations to the catalog', async () => {
-    process.env.AZURE_OPENAI_ENDPOINT = 'https://gyro-test.openai.azure.com';
-    process.env.AZURE_OPENAI_DEPLOYMENT = 'gyro-deployment';
-    process.env.AZURE_OPENAI_API_KEY = 'test-key';
     const seenUrls = new Set<string>();
     const services = allShuffleServices().filter((service) => {
       const key = service.serviceUrl.trim().toLowerCase().replace(/\/+$/, '');
@@ -61,27 +55,15 @@ describe('POST /api/assistant/chat', () => {
       services,
       '반복 업무를 줄이고 싶어요.\nReact\nReact 도구\nTypeScript\n# 프로젝트 README\nReact 앱',
     )[0];
-    const azurePayload = {
-      choices: [{
-        message: {
-          content: JSON.stringify({
-            reply: '현재 도구와 연결할 수 있는 후보예요.',
-            recommendations: [
-              { serviceId: candidate.id, reason: '문제와 관련된 자동화 기능이 있어요.' },
-              { serviceId: 'not-in-catalog', reason: '존재하지 않는 서비스' },
-            ],
-          }),
-        },
-      }],
-    };
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    vi.mocked(generateCopilotReply).mockResolvedValue(JSON.stringify({
+      reply: '현재 도구와 연결할 수 있는 후보예요.',
+      recommendations: [
+        { serviceId: candidate.id, reason: '문제와 관련된 자동화 기능이 있어요.' },
+        { serviceId: 'not-in-catalog', reason: '존재하지 않는 서비스' },
+      ],
+    }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.includes('/openai/deployments/')) {
-        const requestBody = JSON.parse(String(init?.body)) as { messages: Array<{ content: string }> };
-        expect(requestBody.messages[0].content).toContain('React');
-        expect(requestBody.messages[0].content).toContain('프로젝트 README');
-        return new Response(JSON.stringify(azurePayload), { status: 200 });
-      }
       if (url.endsWith('/languages')) return new Response(JSON.stringify({ TypeScript: 1234 }), { status: 200 });
       if (url.endsWith('/readme')) {
         return new Response(JSON.stringify({
@@ -109,15 +91,14 @@ describe('POST /api/assistant/chat', () => {
       url: 'https://github.com/sample/project',
       languages: ['TypeScript'],
     });
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-    const azureRequest = fetchMock.mock.calls.find(([url]) => String(url).includes('/openai/deployments/'));
-    expect(azureRequest?.[1]?.headers).toMatchObject({ 'api-key': 'test-key' });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(generateCopilotReply).toHaveBeenCalledWith(
+      expect.stringContaining('프로젝트 README'),
+      expect.stringContaining('React'),
+    );
   });
 
   it('rejects non-GitHub repository URLs without fetching them', async () => {
-    process.env.AZURE_OPENAI_ENDPOINT = 'https://gyro-test.openai.azure.com';
-    process.env.AZURE_OPENAI_DEPLOYMENT = 'gyro-deployment';
-    process.env.AZURE_OPENAI_API_KEY = 'test-key';
     const fetchMock = vi.fn();
     globalThis.fetch = fetchMock as typeof fetch;
     const response = await request(app).post('/api/assistant/chat').send({
@@ -126,6 +107,27 @@ describe('POST /api/assistant/chat', () => {
     });
     expect(response.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed model output and reports provider failures without leaking credentials', async () => {
+    const payload = { messages: [{ role: 'user', content: '일정을 정리해요.' }] };
+    vi.mocked(generateCopilotReply).mockResolvedValue('not JSON');
+    expect((await request(app).post('/api/assistant/chat').send(payload)).status).toBe(502);
+    vi.mocked(generateCopilotReply).mockRejectedValue(new AssistantProviderError('Copilot 요청이 실패했습니다.'));
+    const response = await request(app).post('/api/assistant/chat').send(payload);
+    expect(response.status).toBe(502);
+    expect(response.text).not.toContain('github_pat_test');
+  });
+
+  it('blocks external origins in local mode even with spoofed forwarding headers', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    vi.stubEnv('GYRO_ASSISTANT_PROVIDER', 'copilot-local');
+    const response = await request(app).post('/api/assistant/chat')
+      .set('Origin', 'https://example.com')
+      .set('x-forwarded-for', '127.0.0.1')
+      .send({ messages: [{ role: 'user', content: '도구를 찾아요.' }] });
+    expect(response.status).toBe(403);
+    expect(generateCopilotReply).not.toHaveBeenCalled();
   });
 
   it('limits chat requests per client IP', async () => {

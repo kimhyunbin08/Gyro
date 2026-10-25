@@ -15,7 +15,7 @@
 5. 작업 기준 발견 + 검증된 연결 가이드 3단계(`prd.md` §9-6 승격, 구현 완료, 상세 §11):
    유형·작업 기반 카탈로그/가이드 → 검증 수준 배지 → 익명 연결 결과 피드백·집계.
    기존 API를 후방 호환 확장하며 신규 엔드포인트·계정·외부 스킬/MCP 자동 실행은 도입하지 않는다.
-6. 홈 대화형 서비스 발견과 Azure OpenAI 연동(`prd.md` §9-8 승격, 상세 §12). 추천 후보는 수동 검수된
+6. 홈 대화형 서비스 발견과 GitHub Copilot SDK 연동(`prd.md` §9-8 승격, 상세 §12). 추천 후보는 수동 검수된
    카탈로그에서만 선택하고, 공개 GitHub 정보 분석은 공개 API의 저장소 설명·언어·README로 제한한다.
 7. 출처·라이선스·확인일·요금 확인 상태를 기록하는 상한 없는 수동 검수 카탈로그.
 
@@ -45,7 +45,8 @@ flowchart LR
   U -->|카탈로그·퍼널 API\nPOST /api/assistant/chat| A["apps/api (Express)"]
   A -->|HEAD/GET 헬스체크| S["학생 제작 서비스 URL들\n(외부, Azure 등)"]
   A -->|정적 import| C["apps/api/src/catalog.ts"]
-  A -->|HTTPS server-side only| AOAI["Azure OpenAI"]
+  A -->|JSON-RPC server-side only| SDK["Copilot SDK isolated runtime"]
+  SDK -->|HTTPS| COPILOT["GitHub Copilot"]
   A -->|public API only| GH["GitHub public API"]
 ```
 
@@ -53,7 +54,8 @@ flowchart LR
   `apps/web/public/config.json`을 기록하고, `app.ts`는 top-level await로 이를 먼저 읽은 뒤
   나머지 로직을 실행한다(`resolveApiBase`).
 - API는 상태를 거의 갖지 않는다: 카탈로그는 검수된 코드 데이터이며, 헬스체크 결과만 URL별로 TTL
-  캐시된다. AI 대화 내용과 공개 README는 요청 처리 중에만 메모리에 있고 로그·저장소에 기록하지 않는다.
+  캐시된다. AI 대화 내용과 공개 README는 영구 저장하지 않는다. SDK는 요청별 임시 디렉터리에서 실행하며
+  요청 종료 시 해당 디렉터리를 제거한다.
 
 ## 5. 기능 요구사항 (기술 관점)
 
@@ -191,7 +193,7 @@ flowchart LR
    `{id, name, tagline, serviceUrl, likeCount}` 형태로 반환한다. 헬스체크 통과 여부와 무관하게
    역대 누적 집계를 보여준다(별도 영속 저장소 없이 기존 인메모리 이벤트 스토어를 재사용).
 7. **AI 대화 서비스**(`apps/api/src/assistant-recommendation.ts`, 상세 §12): 요청을 Zod로 검증하고
-   Azure OpenAI Chat Completions API를 호출한다. 응답 추천은 해당 요청의 카탈로그 후보 ID 집합에
+   GitHub Copilot SDK를 호출한다. 응답 추천은 해당 요청의 카탈로그 후보 ID 집합에
    포함되는 경우만 반환한다. 추천 결과는 기존 헬스체크 캐시를 통과한 항목만 포함한다.
 
 ### 5.3 헬스체크 서비스 (`apps/api/src/services/health-check.service.ts`)
@@ -325,8 +327,9 @@ type FunnelEntry = {
 | `POST /api/email-leads` | 이메일 리드 저장 | Zod(`emailSchema`) | `201` / `409` 중복 / `400` |
 | `POST /api/assistant/chat` | 다중 턴 대화 기반 카탈로그 추천 | 메시지 role/content, techStack, 공개 GitHub URL Zod 검증 | `{ reply, recommendations, analyzedRepository? }` / `400` 입력·저장소 오류 / `413` 요청 크기 / `429` 요청 한도 / `502` AI 오류 / `503` 환경 설정 누락 |
 
-CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 시 `*`. Azure AI 호출은 아래 서버 환경
-변수(`AZURE_OPENAI_*`)를 사용하며 API 키는 브라우저 설정/번들에 넣지 않는다.
+CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 시 `*`. Copilot 호출은 아래 서버 환경
+변수(`GYRO_ASSISTANT_PROVIDER`, `COPILOT_MODEL`, 배포 시 `COPILOT_GITHUB_TOKEN`)를 사용하며
+토큰은 브라우저 설정/번들에 넣지 않는다.
 
 ## 8. 테스트 전략
 - API: Vitest + Supertest. `apps/api/tests/integration.gyro.test.ts`(엔드포인트 통합, `card_dislike`/
@@ -345,9 +348,9 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
    않도록 한다.
 3. 이벤트 저장소는 최대 5000건으로 제한해 메모리 누수를 방지한다.
 4. AI 요청은 사용자 IP 기준 15분당 12회로 제한하고, 한 요청의 메시지 수·길이와 README 처리 크기를
-   제한한다. 요청 본문·저장소 내용·Azure 오류 응답을 로그에 남기지 않는다.
-5. Azure OpenAI는 서버에서만 호출하며, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`,
-   `AZURE_OPENAI_API_KEY`, 선택 `AZURE_OPENAI_API_VERSION`을 사용한다. 키 미설정은 `503`, 모델 오류는
+   제한한다. 요청 본문·저장소 내용·SDK 오류 원문을 로그에 남기지 않는다.
+5. Copilot SDK는 서버에서만 호출하며, `GYRO_ASSISTANT_PROVIDER`, `COPILOT_MODEL`,
+   배포 시 `COPILOT_GITHUB_TOKEN`을 사용한다. 설정 미완료는 `503`, 모델 오류는
    `502`로 반환하며 대체 성공 응답을 만들지 않는다.
 
 ## 10. Phase 2 — "검증 루프" 기술 설계 초안 (§10.1 구현 완료, §10.2 이후 미구현)
@@ -531,25 +534,40 @@ type CatalogService = {                             // 기존 필드에 아래 o
   languages, README 엔드포인트에서 공개 정보만 가져오며 자격증명은 보내지 않는다. README 응답은 64KB
   제한, 모델에 전달하는 텍스트는 12,000자로 자른다. 다른 호스트·저장소 경로·비공개 저장소는 거부하고,
   코드를 실행하지 않는다.
-- 서버는 대화/기술환경/공개 README를 프롬프트에 넣어 Azure OpenAI Chat Completions API를 호출한다.
+- 서버는 대화/기술환경/공개 README를 프롬프트에 넣어 GitHub Copilot SDK를 호출한다.
   카탈로그 후보는 전체 검수 항목에서 어휘 일치 점수 상위 60개를 골라 모델 컨텍스트를 제한한다(카탈로그
   자체의 개수 제한은 아니다). 후보 ID 밖의 생성 결과는 제거하고, 최대 5개 결과만 응답한다. 무작위
   서비스 ID나 카탈로그 외 추천은 표시하지 않는다.
 - 응답은 `{ reply, recommendations: [{ reason, service: Service }], analyzedRepository?: { url, languages } }`.
   추천 항목은 기존 헬스체크를 통과한 경우에만 포함한다. 가격 데이터 누락은 `unknown`으로 표시한다.
-- Azure 설정 누락은 `503`, provider 오류/비정상 JSON은 `502`, 잘못된 요청·저장소 주소/접근 오류는 `400`,
-  요청 한도 초과는 `429`로 반환한다.
+- AI 설정·Copilot 인증 누락은 `503`, provider 오류/비정상 JSON은 `502`, 잘못된 요청·저장소 주소/접근 오류는 `400`,
+  로컬 모드에서 외부 요청은 `403`, 요청 한도/동시 처리 초과는 `429`로 반환한다.
 
 ### 12.2 개인정보·보안·운영
-- Azure OpenAI 키는 API 컨테이너의 비밀 환경변수로만 설정하고 웹 `config.json`이나 정적 번들에는 포함하지 않는다.
+- 로컬 인증 모드는 `GYRO_ASSISTANT_PROVIDER=copilot-local`, `NODE_ENV=development`, `COPILOT_MODEL` 명시 시에만 활성화한다.
+  로컬 API는 이 모드에서 `127.0.0.1`에만 바인딩하고 AI 경로는 실제 소켓의 loopback 주소와 로컬 Origin/Host만
+  허용한다. 프록시 헤더로 로컬 요청을 가장할 수 없고, 공개 배포에서는 `503`으로 차단한다.
+- 공개 배포는 `GYRO_ASSISTANT_PROVIDER=copilot`, `COPILOT_MODEL`, `COPILOT_GITHUB_TOKEN`을 명시한다.
+  PAT는 `github_pat_` 형식의 fine-grained token만 허용하고 SDK의 `gitHubToken`으로 전달하며
+  `useLoggedInUser: false`로 자동 인증 대체를 금지한다. classic PAT는 지원하지 않는다.
+  GitHub Actions의 `COPILOT_GITHUB_TOKEN` secret과 `COPILOT_MODEL` variable을 읽어 API Container App의
+  `copilot-github-token` secret 및 secret reference로 주입한다. 비밀·모델 누락 시 배포를 실패시키고,
+  토큰은 이미지 빌드 인수·웹 컨테이너·로그·`GITHUB_ENV`에 쓰지 않는다. 갱신한 PAT로 재배포하면 새
+  리비전이 새 토큰을 사용한다.
+- `@github/copilot-sdk`의 `mode: "empty"`와 빈 도구 목록, 거부 permission handler로 기본 셸·파일·MCP·스킬
+  실행을 차단한다. 요청별 임시 런타임 디렉터리와 세션을 사용하고 종료·실패 시 세션/프로세스/디렉터리를 정리한다.
+  로컬은 개발자 GitHub CLI 인증, 공개 서버는 명시적 PAT만 사용하며 토큰을 로그·응답·웹 번들로 전달하지 않는다.
 - 공개 저장소 URL은 입력값을 GitHub 호스트로 제한해 서버 측 URL 요청을 고정한다. README와 사용자가 쓴
   메시지는 신뢰할 수 없는 분석 자료로 취급하고 시스템 프롬프트 지시를 대체할 수 없도록 안내한다.
-- 대화 프롬프트, 저장소 URL, README, API 키 및 Azure 원문 오류는 로그·인메모리 이벤트·이메일 리드에
-  기록하지 않는다. 대화 상태는 브라우저 세션 메모리에만 두고 새 대화 시 제거한다.
-- 사용자 동의를 체크한 뒤에만 요청한다. UI에서 개인정보·비밀번호·API 키를 입력하지 말라는 점과 Azure
-  OpenAI 전송 사실을 요청 전에 안내한다.
+- 대화 프롬프트, 저장소 URL, README, 인증 토큰 및 SDK 원문 오류는 로그·인메모리 이벤트·이메일 리드에
+  기록하지 않는다. 장기 대화 상태는 브라우저 세션 메모리에만 두고 새 대화 시 제거한다.
+  SDK 요청별 임시 상태는 성공·실패·응답 제한 시간 초과 시 런타임 종료 후 제거한다.
+- 사용자 동의를 체크한 뒤에만 요청한다. UI에서 개인정보·비밀번호·API 키를 입력하지 말라는 점과 GitHub
+  Copilot 및 선택한 모델 제공자에게 전송된다는 사실을 요청 전에 안내한다.
 - IP 기준 15분당 12회 제한을 두고 `Retry-After`를 반환한다. 제한 상태는 프로세스 메모리이며 서버 재시작
-  시 초기화된다. Azure 쿼터/비용 알림은 배포 환경에서도 별도 설정한다.
+  시 초기화된다. 인증 계정의 Copilot 사용량·조직 정책이 적용된다. 요청은 프로세스당 최대 한 건씩
+  처리하고 SDK 응답 제한 시간은 60초로 둔다. 전체 복제본·IP에 걸친 비용 상한은 보장하지 않으며
+  운영자가 GitHub 사용량 예산과 경고를 별도 설정한다.
 
 ### 12.3 카탈로그 성장·데이터 수급
 - 항목 수에 상한을 두지 않고 기존 셔플·유형·작업 분류로 묶는다. 출처·확인일·요금 검증·라이선스 및
@@ -563,7 +581,7 @@ type CatalogService = {                             // 기존 필드에 아래 o
   확정한다. 현재 구현은 외부 저장소·AI Search 자원을 자동으로 만들지 않는다.
 
 ### 12.4 테스트
-- API: 요청 스키마/한도, Azure 설정 누락·오류, 응답 ID allowlist, 공개 GitHub URL 검증/메타데이터 전달,
+- API: 요청 스키마/한도, Copilot 설정 누락·오류, 응답 ID allowlist, 공개 GitHub URL 검증/메타데이터 전달,
   README 크기 제한, 비공개·외부 도메인 거부, 건강하지 않은 추천 제외를 mock fetch로 확인한다.
 - Web: 동의 전 전송 금지, 사용자/AI 다중 턴 표시, 카탈로그 추천 카드, 요금 미확인 표시, 오류 표시와
   새 대화 초기화를 검증한다.

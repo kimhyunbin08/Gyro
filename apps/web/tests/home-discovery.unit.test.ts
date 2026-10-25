@@ -72,7 +72,9 @@ describe('web unit: home discovery and appearance settings', () => {
     expect(document.getElementById('preview-overlay')!.classList.contains('hidden')).toBe(true);
   });
 
-  it('requires Azure AI consent and renders catalog-backed chat recommendations', async () => {
+  it('requires Copilot consent and renders catalog-backed chat recommendations', async () => {
+    expect(indexHtml).toContain('GitHub Copilot 및 선택한 모델 제공자');
+    expect(indexHtml).not.toContain('Azure OpenAI');
     const fetchMock = vi.fn((url: string) => {
       if (url.includes('config.json')) return Promise.resolve(new Response(JSON.stringify({ apiUrl: 'http://localhost:3001' })));
       if (url.includes('/api/services')) return Promise.resolve(new Response(JSON.stringify({ services: sampleServices })));

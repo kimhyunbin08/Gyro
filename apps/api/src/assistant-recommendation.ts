@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import type { CatalogService } from './catalog.js';
+import { AssistantProviderError, copilotConfiguration, generateCopilotReply } from './copilot-provider.js';
+export { AssistantBusyError, AssistantConfigurationError, AssistantProviderError } from './copilot-provider.js';
 
 const conversationSchema = z.object({
   messages: z.array(z.object({
@@ -22,17 +24,9 @@ export type AssistantMessage = z.infer<typeof conversationSchema>['messages'][nu
 export type AssistantRequest = z.infer<typeof conversationSchema>;
 export type AssistantRecommendation = z.infer<typeof assistantResultSchema>;
 
-export class AssistantConfigurationError extends Error {}
-export class AssistantProviderError extends Error {}
 export class PublicRepositoryError extends Error {}
 
 type RepositoryContext = { url: string; description: string; languages: string[]; readme: string };
-
-function requiredEnvironment(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) throw new AssistantConfigurationError(`${name} 환경 변수가 설정되지 않았습니다.`);
-  return value;
-}
 
 function parsePublicRepositoryUrl(value: string): { owner: string; repo: string; canonicalUrl: string } {
   let url: URL;
@@ -169,10 +163,7 @@ export async function getAssistantRecommendation(
   input: AssistantRequest,
   services: CatalogService[],
 ): Promise<{ result: AssistantRecommendation; repository?: RepositoryContext }> {
-  const endpoint = requiredEnvironment('AZURE_OPENAI_ENDPOINT').replace(/\/+$/, '');
-  const deployment = requiredEnvironment('AZURE_OPENAI_DEPLOYMENT');
-  const apiKey = requiredEnvironment('AZURE_OPENAI_API_KEY');
-  const apiVersion = process.env.AZURE_OPENAI_API_VERSION?.trim() || '2024-10-21';
+  copilotConfiguration();
   let repository: RepositoryContext | undefined;
   if (input.repoUrl) repository = await loadPublicRepository(input.repoUrl);
 
@@ -194,44 +185,13 @@ export async function getAssistantRecommendation(
     `후보 카탈로그 JSON: ${JSON.stringify(candidates.map(compactService))}`,
     repository ? `공개 저장소 분석 자료(JSON): ${JSON.stringify(repository)}` : '',
   ].filter(Boolean).join('\n');
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    ...input.messages,
-    ...(input.techStack ? [{ role: 'user' as const, content: `기술 스택과 현재 사용하는 도구: ${input.techStack}` }] : []),
-  ];
-  let response: Response;
-  try {
-    response = await fetch(`${endpoint}/openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
-      body: JSON.stringify({
-        messages,
-        temperature: 0.2,
-        max_tokens: 1000,
-        response_format: { type: 'json_object' },
-      }),
-      signal: AbortSignal.timeout(20_000),
-    });
-  } catch {
-    throw new AssistantProviderError('AI 추천 서비스에 연결하지 못했습니다.');
-  }
-  if (!response.ok) throw new AssistantProviderError('AI 추천 서비스 요청이 실패했습니다.');
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new AssistantProviderError('AI 추천 서비스 응답을 읽지 못했습니다.');
-  }
-  if (!payload || typeof payload !== 'object' || !('choices' in payload) || !Array.isArray(payload.choices)
-      || payload.choices.length === 0 || !payload.choices[0] || typeof payload.choices[0] !== 'object'
-      || !('message' in payload.choices[0]) || !payload.choices[0].message
-      || typeof payload.choices[0].message !== 'object' || !('content' in payload.choices[0].message)
-      || typeof payload.choices[0].message.content !== 'string') {
-    throw new AssistantProviderError('AI 추천 서비스 응답 형식이 올바르지 않습니다.');
-  }
+  const content = await generateCopilotReply(systemPrompt, JSON.stringify({
+    messages: input.messages,
+    techStack: input.techStack ?? '',
+  }));
   let generated: unknown;
   try {
-    generated = JSON.parse(payload.choices[0].message.content);
+    generated = JSON.parse(content);
   } catch {
     throw new AssistantProviderError('AI 추천 서비스가 올바른 JSON 응답을 반환하지 않았습니다.');
   }
