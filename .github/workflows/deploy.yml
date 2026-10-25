@@ -97,7 +97,8 @@ jobs:
       - name: Deploy Web revision
         run: |
           az containerapp update -n "$WEB_APP" -g "$RESOURCE_GROUP" \
-            --image "$ACR_LOGIN_SERVER/gyro/web-production:${{ github.sha }}"
+            --image "$ACR_LOGIN_SERVER/gyro/web-production:${{ github.sha }}" \
+            --set-env-vars "GYRO_API_URL=$API_URL"
 
   deploy-production:
     needs: build
@@ -155,4 +156,5 @@ jobs:
       - name: Deploy Web revision
         run: |
           az containerapp update -n "$WEB_APP" -g "$RESOURCE_GROUP" \
-            --image "$ACR_LOGIN_SERVER/gyro/web-production:${{ github.sha }}"
+            --image "$ACR_LOGIN_SERVER/gyro/web-production:${{ github.sha }}" \
+            --set-env-vars "GYRO_API_URL=$API_URL"
