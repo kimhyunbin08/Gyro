@@ -3,6 +3,12 @@ import { createCatalogLoader, type CatalogService as Service, type CatalogKind, 
 import { searchCatalogServices, type ServiceSearchKind } from './service-search.js';
 
 type Audience = 'student' | 'teacher' | 'parent' | 'other';
+type AssistantMessage = { role: 'user' | 'assistant'; content: string };
+type AssistantResponse = {
+  reply: string;
+  recommendations: Array<{ reason: string; service: Service }>;
+  analyzedRepository?: { url: string; languages: string[] };
+};
 // Runtime config is fetched (not baked into the JS bundle) so the public web
 // image stays environment-agnostic; config.json is written by the container
 // entrypoint at startup. Resolved via top-level await so nothing below runs
@@ -89,6 +95,10 @@ const APPEARANCE_THEME_STORAGE_KEY = 'gyro.appearance-theme';
 let homeCatalogServices: Service[] = [];
 let homeCatalogState: 'loading' | 'ready' | 'error' = 'loading';
 let selectedHomeKind: ServiceSearchKind = 'all';
+let homeCatalogPage = 0;
+const HOME_CATALOG_PAGE_SIZE = 24;
+const assistantMessages: AssistantMessage[] = [];
+let assistantRequestPending = false;
 let profileCatalogReady = false;
 let profileCatalogError = false;
 let profileLoadToken = 0;
@@ -260,6 +270,10 @@ function createHomeServiceCard(service: Service): HTMLElement {
   kind.className = 'kind-badge';
   kind.textContent = kindLabel(service.kind);
   labels.append(kind);
+  const pricing = document.createElement('span');
+  pricing.className = 'home-product-tag';
+  pricing.textContent = pricingLabel(service);
+  labels.append(pricing);
   for (const tag of service.tags.slice(0, 2)) {
     const badge = document.createElement('span');
     badge.className = 'home-product-tag';
@@ -302,7 +316,9 @@ function renderHomeCatalog(): void {
   const input = $<HTMLInputElement>('service-search');
   const query = input.value.trim();
   const matches = searchCatalogServices(homeCatalogServices, query, selectedHomeKind);
-  const items = query || selectedHomeKind !== 'all' ? matches : matches.slice(0, 8);
+  const defaultView = !query && selectedHomeKind === 'all';
+  const visibleLimit = defaultView ? 8 + homeCatalogPage * HOME_CATALOG_PAGE_SIZE : (homeCatalogPage + 1) * HOME_CATALOG_PAGE_SIZE;
+  const items = matches.slice(0, visibleLimit);
   const status = $('home-catalog-status');
   const list = $('home-service-list');
   list.replaceChildren();
@@ -337,6 +353,17 @@ function renderHomeCatalog(): void {
     ? `${matches.length}개 서비스`
     : `${homeCatalogServices.length}개 중 ${items.length}개 표시`;
   list.append(...items.map(createHomeServiceCard));
+  if (items.length < matches.length) {
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'button button-outline home-catalog-more';
+    more.textContent = `더 보기 (${matches.length - items.length}개 남음)`;
+    more.onclick = () => {
+      homeCatalogPage++;
+      renderHomeCatalog();
+    };
+    list.append(more);
+  }
 }
 function loadHomeCatalog(): Promise<void> {
   homeCatalogState = 'loading';
@@ -350,6 +377,105 @@ function loadHomeCatalog(): Promise<void> {
     console.error('홈 서비스 카탈로그를 불러오지 못했습니다.', error);
     renderHomeCatalog();
   });
+}
+function isAssistantService(value: unknown): value is Service {
+  if (!value || typeof value !== 'object') return false;
+  const service = value as Record<string, unknown>;
+  return typeof service.id === 'string'
+    && typeof service.name === 'string'
+    && typeof service.tagline === 'string'
+    && typeof service.description === 'string'
+    && typeof service.serviceUrl === 'string'
+    && typeof service.imageUrl === 'string'
+    && Array.isArray(service.tags)
+    && service.tags.every((tag) => typeof tag === 'string')
+    && Array.isArray(service.audiences)
+    && service.audiences.every((item) => typeof item === 'string');
+}
+function parseAssistantResponse(value: unknown): AssistantResponse | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const payload = value as Record<string, unknown>;
+  if (typeof payload.reply !== 'string' || !Array.isArray(payload.recommendations)) return undefined;
+  const recommendations = payload.recommendations.flatMap((entry): AssistantResponse['recommendations'] => {
+    if (!entry || typeof entry !== 'object') return [];
+    const item = entry as Record<string, unknown>;
+    if (typeof item.reason !== 'string' || !isAssistantService(item.service)) return [];
+    return [{ reason: item.reason, service: item.service }];
+  });
+  let analyzedRepository: AssistantResponse['analyzedRepository'];
+  if (payload.analyzedRepository && typeof payload.analyzedRepository === 'object') {
+    const repository = payload.analyzedRepository as Record<string, unknown>;
+    if (typeof repository.url === 'string' && Array.isArray(repository.languages)
+        && repository.languages.every((language) => typeof language === 'string')) {
+      analyzedRepository = { url: repository.url, languages: repository.languages };
+    }
+  }
+  return { reply: payload.reply, recommendations, ...(analyzedRepository ? { analyzedRepository } : {}) };
+}
+function appendAssistantMessage(role: AssistantMessage['role'], content: string): void {
+  const message = document.createElement('div');
+  message.className = `assistant-message ${role === 'assistant' ? 'assistant-message-ai' : 'assistant-message-user'}`;
+  if (role === 'assistant') {
+    const avatar = document.createElement('span');
+    avatar.className = 'assistant-avatar';
+    avatar.setAttribute('aria-hidden', 'true');
+    avatar.textContent = 'g';
+    message.append(avatar);
+  }
+  const paragraph = document.createElement('p');
+  paragraph.textContent = content;
+  message.append(paragraph);
+  const thread = $('assistant-thread');
+  thread.append(message);
+  thread.scrollTop = thread.scrollHeight;
+}
+function pricingLabel(service: Service): string {
+  return ({
+    free: '무료 확인',
+    freemium: '무료 플랜 확인',
+    paid: '유료 확인',
+    unknown: '요금 확인 필요',
+  } as const)[service.pricing?.model ?? 'unknown'];
+}
+function appendAssistantRecommendations(recommendations: AssistantResponse['recommendations']): void {
+  if (!recommendations.length) return;
+  const list = document.createElement('div');
+  list.className = 'assistant-recommendations';
+  for (const { service, reason } of recommendations) {
+    const card = document.createElement('article');
+    card.className = 'assistant-recommendation';
+    const title = document.createElement('h3');
+    title.textContent = service.name;
+    const tagline = document.createElement('p');
+    tagline.textContent = service.tagline;
+    const explanation = document.createElement('p');
+    explanation.textContent = reason || '설명한 문제와 관련된 카탈로그 항목이에요.';
+    const labels = document.createElement('div');
+    labels.className = 'assistant-recommendation-labels';
+    for (const label of [kindLabel(service.kind), pricingLabel(service), verificationLabel(service)]) {
+      const badge = document.createElement('span');
+      badge.textContent = label;
+      labels.append(badge);
+    }
+    const actions = document.createElement('div');
+    actions.className = 'assistant-recommendation-actions';
+    const official = document.createElement('a');
+    official.href = service.serviceUrl;
+    official.target = '_blank';
+    official.rel = 'noopener noreferrer';
+    official.textContent = '공식 페이지 ↗';
+    official.addEventListener('click', () => track('service_click', { serviceId: service.id, mode: 'official' }));
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.textContent = isGuideService(service) ? '연결 가이드' : '미리보기';
+    open.onclick = () => isGuideService(service) ? openGuide(service) : openPreview(service);
+    actions.append(official, open);
+    card.append(title, tagline, explanation, labels, actions);
+    list.append(card);
+  }
+  const thread = $('assistant-thread');
+  thread.append(list);
+  thread.scrollTop = thread.scrollHeight;
 }
 function renderCard(){
   if (index >= batchEnd) { finishBatch(); return; }
@@ -878,20 +1004,86 @@ $('ranking-link-results').onclick=()=>openRanking('results');
 $('ranking-nav').onclick=()=>openRanking('landing');
 $('ranking-back').onclick=closeRanking;
 $('home-ranking-entry').onclick=()=>openRanking('landing');
-$('browse-categories').onclick=()=>themeEntryButton.click();
-$('browse-tasks').onclick=()=>taskEntryButton.click();
 $('discover-nav').onclick=()=>{
   if($('landing').classList.contains('hidden'))goHome();
-  $<HTMLInputElement>('service-search').focus();
+  $<HTMLTextAreaElement>('assistant-message').focus();
 };
 $('brand-home').onclick=event=>{event.preventDefault();goHome();};
 $('home-search-form').onsubmit=(event)=>{event.preventDefault();renderHomeCatalog();};
+$('assistant-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (assistantRequestPending) return;
+  const messageInput = $<HTMLTextAreaElement>('assistant-message');
+  const content = messageInput.value.trim();
+  const status = $('assistant-status');
+  if (!content) return;
+  if (!$<HTMLInputElement>('assistant-consent').checked) {
+    status.textContent = 'AI 전송 동의를 확인해 주세요.';
+    return;
+  }
+
+  assistantMessages.push({ role: 'user', content });
+  $('landing').classList.add('has-assistant-conversation');
+  appendAssistantMessage('user', content);
+  messageInput.value = '';
+  assistantRequestPending = true;
+  $<HTMLButtonElement>('assistant-send').disabled = true;
+  status.textContent = '문제와 맞는 서비스를 살펴보고 있어요...';
+  try {
+    const response = await fetch(`${API}/api/assistant/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: assistantMessages.slice(-12),
+        techStack: $<HTMLInputElement>('assistant-tech-stack').value.trim(),
+        repoUrl: $<HTMLInputElement>('assistant-repo-url').value.trim(),
+      }),
+    });
+    const payload: unknown = await response.json();
+    if (!response.ok) {
+      const message = payload && typeof payload === 'object' && 'message' in payload && typeof payload.message === 'string'
+        ? payload.message
+        : 'AI 추천을 가져오지 못했어요. 잠시 후 다시 시도해 주세요.';
+      status.textContent = message;
+      return;
+    }
+    const result = parseAssistantResponse(payload);
+    if (!result) {
+      status.textContent = 'AI 추천 응답을 확인할 수 없어요. 다시 시도해 주세요.';
+      return;
+    }
+    assistantMessages.push({ role: 'assistant', content: result.reply });
+    appendAssistantMessage('assistant', result.reply);
+    appendAssistantRecommendations(result.recommendations);
+    status.textContent = result.analyzedRepository
+      ? `공개 저장소 확인 완료 · ${result.analyzedRepository.languages.join(', ') || '언어 정보 없음'}`
+      : '';
+  } catch {
+    status.textContent = 'AI 추천 서비스에 연결할 수 없어요. 네트워크를 확인하고 다시 시도해 주세요.';
+  } finally {
+    assistantRequestPending = false;
+    $<HTMLButtonElement>('assistant-send').disabled = false;
+  }
+});
+$('assistant-reset').addEventListener('click', () => {
+  if (assistantRequestPending) return;
+  assistantMessages.length = 0;
+  $('assistant-thread').replaceChildren();
+  $('landing').classList.remove('has-assistant-conversation');
+  $<HTMLTextAreaElement>('assistant-message').value = '';
+  $<HTMLInputElement>('assistant-tech-stack').value = '';
+  $<HTMLInputElement>('assistant-repo-url').value = '';
+  $<HTMLInputElement>('assistant-consent').checked = false;
+  $('assistant-status').textContent = '';
+});
 $('service-search').addEventListener('input',()=>{
+  homeCatalogPage=0;
   $('clear-search').classList.toggle('hidden',!$<HTMLInputElement>('service-search').value);
   renderHomeCatalog();
 });
 $('clear-search').onclick=()=>{
   $<HTMLInputElement>('service-search').value='';
+  homeCatalogPage=0;
   $('clear-search').classList.add('hidden');
   renderHomeCatalog();
   $<HTMLInputElement>('service-search').focus();
@@ -900,6 +1092,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-home-kind]').forEach(button=
   const kind=button.dataset.homeKind;
   if(kind!=='all'&&kind!=='product'&&kind!=='service'&&kind!=='skill'&&kind!=='mcp')return;
   selectedHomeKind=kind;
+  homeCatalogPage=0;
   document.querySelectorAll<HTMLButtonElement>('[data-home-kind]').forEach(filter=>{
     const selected=filter===button;
     filter.classList.toggle('selected',selected);

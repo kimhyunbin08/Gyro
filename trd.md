@@ -1,4 +1,4 @@
-# TRD: Gyro 서비스 발견 스와이프 MVP (v1.0)
+# TRD: Gyro 대화형 AI 서비스 발견 Web MVP (v1.1)
 
 ## 1. 문서 목적
 - `prd.md`를 구현 가능한 기술 요구사항으로 고정한다.
@@ -15,11 +15,15 @@
 5. 작업 기준 발견 + 검증된 연결 가이드 3단계(`prd.md` §9-6 승격, 구현 완료, 상세 §11):
    유형·작업 기반 카탈로그/가이드 → 검증 수준 배지 → 익명 연결 결과 피드백·집계.
    기존 API를 후방 호환 확장하며 신규 엔드포인트·계정·외부 스킬/MCP 자동 실행은 도입하지 않는다.
+6. 홈 대화형 서비스 발견과 Azure OpenAI 연동(`prd.md` §9-8 승격, 상세 §12). 추천 후보는 수동 검수된
+   카탈로그에서만 선택하고, 공개 GitHub 정보 분석은 공개 API의 저장소 설명·언어·README로 제한한다.
+7. 출처·라이선스·확인일·요금 확인 상태를 기록하는 상한 없는 수동 검수 카탈로그.
 
 ### 2.2 Out of Scope (Deferred)
 1. 로그인/회원가입, 사용자 계정/프로필 영속화.
 2. 실제 이메일 발송 파이프라인(SMTP/ESP 연동, 반송 처리, 원클릭 수신거부).
-3. 데이터베이스 영속화 — 현재 이벤트/이메일 리드는 프로세스 메모리에만 보관된다.
+3. 발견자 계정·대화·프로필·AI 요청의 영속 저장.
+4. 비공개 GitHub 저장소 접근, 임의 웹사이트 수집, 카탈로그 후보 자동 공개, AI에 의한 카탈로그 수정.
 
 > Phase 2("검증 루프") 설계 초안 중 §14.3(계정 불필요 항목)은 구현되어 §2.1 #4로 승격되었다.
 > §14.4(빌더 계정 필요 항목)의 기술 설계는 §10에 별도로 정리되어 있으며, 아직 구현되지 않았다.
@@ -28,8 +32,9 @@
 ## 3. 기술 스택
 1. **Frontend**: TypeScript + Vite, 순수 DOM 조작(프레임워크 없음), `fetch`로 API 호출.
 2. **Backend API**: Node.js + Express 5 + Zod(입력 검증) + TypeScript(ESM).
-3. **Data/Storage**: 정적 카탈로그(`apps/api/src/catalog.ts`에 빌드타임 등록) + 인메모리 이벤트/이메일
-   저장소. 별도 데이터베이스 없음.
+3. **Data/Storage**: 현재는 검수된 정적 카탈로그 TypeScript 데이터 + 인메모리 이벤트/이메일 저장소.
+   항목 수 상한은 없으며, catalog source adapter로 분리 가능한 모듈 경계를 유지한다. 대화/추천 로그는
+   저장하지 않는다. 별도 데이터베이스는 아직 없다.
 4. **배포**: Azure Container Apps 2개(web/api), ACR 원격 빌드(`azd up`). `DEPLOYMENT.md` 참고.
 
 ## 4. 아키텍처 개요
@@ -37,16 +42,18 @@
 ```mermaid
 flowchart LR
   U["사용자 브라우저"] -->|GET /config.json| W["apps/web (Vite static)"]
-  U -->|GET /api/services\nGET /api/services/ranking\nPOST /api/events\nPOST /api/email-leads| A["apps/api (Express)"]
+  U -->|카탈로그·퍼널 API\nPOST /api/assistant/chat| A["apps/api (Express)"]
   A -->|HEAD/GET 헬스체크| S["학생 제작 서비스 URL들\n(외부, Azure 등)"]
   A -->|정적 import| C["apps/api/src/catalog.ts"]
+  A -->|HTTPS server-side only| AOAI["Azure OpenAI"]
+  A -->|public API only| GH["GitHub public API"]
 ```
 
 - 웹 번들에는 API 베이스 URL을 하드코딩하지 않는다. 컨테이너 엔트리포인트가 런타임에
   `apps/web/public/config.json`을 기록하고, `app.ts`는 top-level await로 이를 먼저 읽은 뒤
   나머지 로직을 실행한다(`resolveApiBase`).
-- API는 상태를 거의 갖지 않는다: 카탈로그는 코드에 정적으로 포함되고, 헬스체크 결과만 URL별로
-  TTL 캐시된다.
+- API는 상태를 거의 갖지 않는다: 카탈로그는 검수된 코드 데이터이며, 헬스체크 결과만 URL별로 TTL
+  캐시된다. AI 대화 내용과 공개 README는 요청 처리 중에만 메모리에 있고 로그·저장소에 기록하지 않는다.
 
 ## 5. 기능 요구사항 (기술 관점)
 
@@ -136,6 +143,11 @@ flowchart LR
     0장 덱 진입을 막는다. `tier` 화면의 "← 테마 다시 고르기" 버튼은 `theme` 화면으로 돌아간다
     (홈으로 가는 것과는 별개 동작). 이 화면은 테마 셔플에만 존재하며 바이브 벤처 플로우에는
     삽입되지 않는다.
+16. **홈 대화형 발견**(`prd.md` §9-8): 랜딩의 주된 영역은 다중 턴 AI 대화다. 브라우저는 대화를
+     메모리에서만 유지하고 매 요청 마지막 12개 메시지를 `POST /api/assistant/chat`으로 보낸다.
+     명시 동의가 없으면 전송하지 않는다. API 실패는 상태 메시지로 보여주며 AI 응답을 성공처럼 꾸미지
+     않는다. 응답은 검수된 카탈로그 ID의 서비스 카드로 렌더링하고, 검색·카탈로그 목록은 아래 보조
+     섹션에 계속 제공한다.
 
 ### 5.2 백엔드 API (`apps/api/src/server.ts`)
 1. `GET /health` — 컨테이너 헬스체크용 상태 엔드포인트.
@@ -147,8 +159,8 @@ flowchart LR
    후보를 공식 링크 기준으로 중복 제거(`dedupeCatalog`)한 다음 `checkServiceHealth()`로 실시간 접속
    가능 여부를 확인하고, 실패한 서비스를 제외한
    목록을 반환한다. 테마 카탈로그는 `apps/api/src/catalogs/{sns,dating,productivity,game}.ts`에
-   정적으로 정의되어 있으며 각 주류/비주류 티어에 각각 20~30개의 실서비스를 둔다(§9-4 #5/#7:
-   공개 정보, 직접 요약한 설명文). 반복되는 카탈로그 필드는 `catalog-entry.ts` 빌더에서 생성하고,
+   정적으로 정의되어 있으며 주류/비주류 티어는 항목 수 제한 없이 확장한다(§9-4 #5/#7: 허용된 공개 정보,
+   사람이 확인하고 직접 요약한 설명). 반복되는 카탈로그 필드는 `catalog-entry.ts` 빌더에서 생성하고,
    서비스별 공식 URL/이름/설명/태그만 데이터로 선언한다. `tier` 필드가 없는 엔트리(바이브 벤처
    카탈로그 등)는 `mainstream`으로 취급한다. 작업 카탈로그는 `catalogs/task.ts`에서 별도 큐레이션한다(§11).
 2-1. `GET /api/services/funnel`·`GET /api/services/ranking`은 `shuffles.ts`의
@@ -178,6 +190,9 @@ flowchart LR
    집계하고, 선택 횟수가 1회 이상인 서비스를 내림차순 정렬해 상위 `RANKING_LIMIT`(20)개를
    `{id, name, tagline, serviceUrl, likeCount}` 형태로 반환한다. 헬스체크 통과 여부와 무관하게
    역대 누적 집계를 보여준다(별도 영속 저장소 없이 기존 인메모리 이벤트 스토어를 재사용).
+7. **AI 대화 서비스**(`apps/api/src/assistant-recommendation.ts`, 상세 §12): 요청을 Zod로 검증하고
+   Azure OpenAI Chat Completions API를 호출한다. 응답 추천은 해당 요청의 카탈로그 후보 ID 집합에
+   포함되는 경우만 반환한다. 추천 결과는 기존 헬스체크 캐시를 통과한 항목만 포함한다.
 
 ### 5.3 헬스체크 서비스 (`apps/api/src/services/health-check.service.ts`)
 1. URL당 HEAD 요청을 우선 시도하고, `405`/`501` 응답 시 GET으로 폴백한다.
@@ -234,6 +249,7 @@ type CatalogService = {
   audiences: ('student' | 'teacher' | 'parent' | 'other')[];
   room: string; roomKey: string; number: string;
   tier?: 'mainstream' | 'emerging';
+  pricing?: { model: 'free' | 'freemium' | 'paid' | 'unknown'; note?: string; verifiedAt?: string; source?: string };
 };
 ```
 
@@ -307,8 +323,10 @@ type FunnelEntry = {
 | `GET /api/services/funnel` | 서비스별 노출/관심 있음/관심 없음/건너뛰기/미리보기·문서 클릭/이유 태그/재체험 의향/체류시간/연결 결과 집계 | - | `{ funnel: FunnelEntry[] }` |
 | `POST /api/events` | 퍼널 이벤트 적재 | Zod(`eventSchema`) | `202 { accepted: true }` / `400` |
 | `POST /api/email-leads` | 이메일 리드 저장 | Zod(`emailSchema`) | `201` / `409` 중복 / `400` |
+| `POST /api/assistant/chat` | 다중 턴 대화 기반 카탈로그 추천 | 메시지 role/content, techStack, 공개 GitHub URL Zod 검증 | `{ reply, recommendations, analyzedRepository? }` / `400` 입력·저장소 오류 / `413` 요청 크기 / `429` 요청 한도 / `502` AI 오류 / `503` 환경 설정 누락 |
 
-CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 시 `*`.
+CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 시 `*`. Azure AI 호출은 아래 서버 환경
+변수(`AZURE_OPENAI_*`)를 사용하며 API 키는 브라우저 설정/번들에 넣지 않는다.
 
 ## 8. 테스트 전략
 - API: Vitest + Supertest. `apps/api/tests/integration.gyro.test.ts`(엔드포인트 통합, `card_dislike`/
@@ -326,6 +344,11 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
 2. 헬스체크 타임아웃은 4초로 제한해 느린/죽은 서비스가 `/api/services` 응답 전체를 지연시키지
    않도록 한다.
 3. 이벤트 저장소는 최대 5000건으로 제한해 메모리 누수를 방지한다.
+4. AI 요청은 사용자 IP 기준 15분당 12회로 제한하고, 한 요청의 메시지 수·길이와 README 처리 크기를
+   제한한다. 요청 본문·저장소 내용·Azure 오류 응답을 로그에 남기지 않는다.
+5. Azure OpenAI는 서버에서만 호출하며, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`,
+   `AZURE_OPENAI_API_KEY`, 선택 `AZURE_OPENAI_API_VERSION`을 사용한다. 키 미설정은 `503`, 모델 오류는
+   `502`로 반환하며 대체 성공 응답을 만들지 않는다.
 
 ## 10. Phase 2 — "검증 루프" 기술 설계 초안 (§10.1 구현 완료, §10.2 이후 미구현)
 
@@ -371,6 +394,7 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
   type ImprovementReport = {
     serviceId: string; status: 'free_preview' | 'paid_unlocked'; generatedAt: string;
     summary: string; prioritizedSuggestions: string[];
+    pricing?: { model: 'free' | 'freemium' | 'paid' | 'unknown'; note?: string; verifiedAt?: string; source?: string };
   };
   ```
 - **신규 엔드포인트(초안, 미구현)**:
@@ -447,6 +471,8 @@ type CatalogService = {                             // 기존 필드에 아래 o
   그대로 사용한다. 이미지가 없는 항목은 텍스트 기반 대체 UI를 쓴다.
 - 작업 셔플은 `apps/api/src/catalogs/task.ts`의 수동 큐레이션 27개 항목(국내 메신저·공공 데이터·결제 포함)을 제공한다. 출처·환경·검증일을
   기록하지 않은 값은 UI에서 "확인 안 됨"/"검증일 미기록"으로 표시하며, 헬스체크로 상위 검증 수준을 올리지 않는다.
+- `pricing`은 선택 필드다. 확인된 무료/부분 무료/유료만 `verifiedAt`·`source`와 함께 기록하고, 필드가
+  없는 기존 항목은 UI와 AI 프롬프트에서 `unknown`("요금 확인 필요")으로 취급한다.
 - API 테스트에서 카탈로그 유형·작업 태그, 연결 가이드 필수 필드, 검증 출처와 상위 검증 수준의 필수 날짜를 확인한다.
 
 ### 11.2 API 변경
@@ -472,12 +498,12 @@ type CatalogService = {                             // 기존 필드에 아래 o
 - 외부 링크는 `rel="noopener noreferrer"`, 가이드의 외부 텍스트는 이스케이프(textContent)로 렌더링한다.
 - 랜딩은 `createCatalogLoader`의 기본(`vibe-venture`) 응답을 백그라운드에서 재사용한다. 검색은 이름·소개·
   태그·작업 문자열과 유형 필터로 클라이언트에서 처리하며 새 API나 검색어 이벤트를 추가하지 않는다.
-  유형 미지정 항목은 `service`로 간주한다. 기본 목록은 항목 일부를 보여주고 검색/유형 필터 적용 시
-  일치 항목을 모두 표시한다.
+  유형 미지정 항목은 `service`로 간주한다. 기본 목록은 항목 일부부터 보여주며 검색/필터 결과는 페이지 단위로
+  추가 표시해 카탈로그가 커져도 모든 결과를 한 번에 DOM에 렌더링하지 않는다.
 - 홈 카탈로그 항목은 공식 링크와 기존 미리보기/연결 가이드로 연결한다. 카탈로그 로드 오류·빈 결과는
   랜딩 내 상태 메시지로 안내하며 다른 발견 진입을 막지 않는다.
-- 첫 화면은 Product Hunt의 탐색 패턴(상단 메뉴, 검색, 서비스 목록)을 참고하되 Gyro 카탈로그와 기존
-  익명 사용자 정책을 유지한다.
+- 홈은 대화창을 우선 표시하고 Product Hunt식 검색/서비스 목록은 아래에 제공한다. 기존 고정 메뉴
+  "홈", "주제별 탐색", "작업으로 찾기"를 유지한다.
 - `Paper`/`Clay`/`Midnight` 토큰 CSS를 `apps/web/src/themes/`에 두고 루트 `<html data-theme>`에 적용한다.
   기본값은 `Midnight`이며 설정은 허용된 테마 ID만 적용하고 `localStorage`에만 저장한다.
   ThemeAI의 Geist/Geist Mono/Fraunces를 불러오고 한글 글리프는 Noto Sans KR로 보완한다.
@@ -491,6 +517,53 @@ type CatalogService = {                             // 기존 필드에 아래 o
 - Web: 공통 고정 헤더의 핵심 메뉴 레이블·화면별 활성 상태·Midnight 초기 테마를 검증한다.
 
 ### 11.5 롤아웃 및 이후 단계
-1) §11.1 스키마 + 27개 큐레이션 + 카드/가이드 UI ✅ → 2) 검증 배지 ✅ → 3) 연결 결과 피드백·집계 ✅.
+1) §11.1 스키마 + 수동 검수 큐레이션 + 카드/가이드 UI ✅ → 2) 검증 배지 ✅ → 3) 연결 결과 피드백·집계 ✅.
 이후(별도 승격): 에이전트용 읽기 전용 조회, 공급자 제출·런치 보드(§10.2 빌더 계정 연계).
 외부 콘텐츠를 에이전트에 반환하는 단계가 오면 프롬프트 인젝션·요청 제한·캐시 설계를 선행한다.
+
+## 12. 대화형 AI 서비스 발견 기술 설계 (`prd.md` §9-8 승격)
+
+### 12.1 요청/응답
+- `POST /api/assistant/chat` 요청: `{ messages: [{ role: 'user'|'assistant', content: string }], techStack?: string, repoUrl?: string }`.
+  메시지는 1~12개, 각 1~1500자, 기술환경 500자 이하, 저장소 URL 300자 이하로 Zod 검증하며
+  Express JSON 본문 제한(32KB)을 함께 적용한다.
+- `repoUrl`은 HTTPS `github.com/{owner}/{repo}` URL만 허용한다. `api.github.com`의 공개 저장소,
+  languages, README 엔드포인트에서 공개 정보만 가져오며 자격증명은 보내지 않는다. README 응답은 64KB
+  제한, 모델에 전달하는 텍스트는 12,000자로 자른다. 다른 호스트·저장소 경로·비공개 저장소는 거부하고,
+  코드를 실행하지 않는다.
+- 서버는 대화/기술환경/공개 README를 프롬프트에 넣어 Azure OpenAI Chat Completions API를 호출한다.
+  카탈로그 후보는 전체 검수 항목에서 어휘 일치 점수 상위 60개를 골라 모델 컨텍스트를 제한한다(카탈로그
+  자체의 개수 제한은 아니다). 후보 ID 밖의 생성 결과는 제거하고, 최대 5개 결과만 응답한다. 무작위
+  서비스 ID나 카탈로그 외 추천은 표시하지 않는다.
+- 응답은 `{ reply, recommendations: [{ reason, service: Service }], analyzedRepository?: { url, languages } }`.
+  추천 항목은 기존 헬스체크를 통과한 경우에만 포함한다. 가격 데이터 누락은 `unknown`으로 표시한다.
+- Azure 설정 누락은 `503`, provider 오류/비정상 JSON은 `502`, 잘못된 요청·저장소 주소/접근 오류는 `400`,
+  요청 한도 초과는 `429`로 반환한다.
+
+### 12.2 개인정보·보안·운영
+- Azure OpenAI 키는 API 컨테이너의 비밀 환경변수로만 설정하고 웹 `config.json`이나 정적 번들에는 포함하지 않는다.
+- 공개 저장소 URL은 입력값을 GitHub 호스트로 제한해 서버 측 URL 요청을 고정한다. README와 사용자가 쓴
+  메시지는 신뢰할 수 없는 분석 자료로 취급하고 시스템 프롬프트 지시를 대체할 수 없도록 안내한다.
+- 대화 프롬프트, 저장소 URL, README, API 키 및 Azure 원문 오류는 로그·인메모리 이벤트·이메일 리드에
+  기록하지 않는다. 대화 상태는 브라우저 세션 메모리에만 두고 새 대화 시 제거한다.
+- 사용자 동의를 체크한 뒤에만 요청한다. UI에서 개인정보·비밀번호·API 키를 입력하지 말라는 점과 Azure
+  OpenAI 전송 사실을 요청 전에 안내한다.
+- IP 기준 15분당 12회 제한을 두고 `Retry-After`를 반환한다. 제한 상태는 프로세스 메모리이며 서버 재시작
+  시 초기화된다. Azure 쿼터/비용 알림은 배포 환경에서도 별도 설정한다.
+
+### 12.3 카탈로그 성장·데이터 수급
+- 항목 수에 상한을 두지 않고 기존 셔플·유형·작업 분류로 묶는다. 출처·확인일·요금 검증·라이선스 및
+  유지 상태는 사람의 검수 기록으로 남긴다. 승인된 정적 카탈로그 변경은 PR로 검토하는 것을 초기
+  데이터 게시 절차로 한다.
+- 후보 발굴은 공식 API·허용된 공개 피드·공식 사이트/문서·공개 저장소/디렉터리에서 수행한다.
+  Product Hunt, LinkedIn, X, Threads는 접근이 허용된 경로만 사용하고, ToS 위반 크롤링이나 자동 게시를
+  하지 않는다.
+- 정적 데이터와 인메모리 이벤트 구조는 초기 운영용이다. 대규모 수집/검색, 관리자 검수 큐, 장기
+  영속화로 넘어가기 전에는 별도 ADR에서 카탈로그 DB 및 Azure AI Search 도입 여부·비용·운영 권한을
+  확정한다. 현재 구현은 외부 저장소·AI Search 자원을 자동으로 만들지 않는다.
+
+### 12.4 테스트
+- API: 요청 스키마/한도, Azure 설정 누락·오류, 응답 ID allowlist, 공개 GitHub URL 검증/메타데이터 전달,
+  README 크기 제한, 비공개·외부 도메인 거부, 건강하지 않은 추천 제외를 mock fetch로 확인한다.
+- Web: 동의 전 전송 금지, 사용자/AI 다중 턴 표시, 카탈로그 추천 카드, 요금 미확인 표시, 오류 표시와
+  새 대화 초기화를 검증한다.

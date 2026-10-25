@@ -18,6 +18,12 @@ export type ServiceVerification = {
   environment?: string;
   sources: string[];
 };
+export type ServicePricing = {
+  model: 'free' | 'freemium' | 'paid' | 'unknown';
+  note?: string;
+  verifiedAt?: string;
+  source?: string;
+};
 export type CatalogService = {
   id: string;
   name: string;
@@ -35,6 +41,7 @@ export type CatalogService = {
   tasks?: string[];
   connection?: ConnectionGuide;
   verification?: ServiceVerification;
+  pricing?: ServicePricing;
 };
 
 export const catalog: CatalogService[] = [

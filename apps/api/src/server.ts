@@ -5,6 +5,13 @@ import { checkServiceHealth, resolveServiceUrl, startCatalogHealthMonitor } from
 import { allShuffleServices, filterByTier, findServiceById, resolveShuffleCatalog } from './shuffles.js';
 import { getServiceImage } from './image-proxy.js';
 import { isTaskId } from './catalogs/task.js';
+import {
+  AssistantConfigurationError,
+  AssistantProviderError,
+  PublicRepositoryError,
+  getAssistantRecommendation,
+  parseAssistantRequest,
+} from './assistant-recommendation.js';
 
 type Audience = 'student' | 'teacher' | 'parent' | 'other';
 type EventName =
@@ -44,11 +51,13 @@ type Service = {
     docsUrl: string;
   };
   verification?: { level: 'link' | 'docs' | 'install'; verifiedAt?: string; environment?: string; sources: string[] };
+  pricing?: { model: 'free' | 'freemium' | 'paid' | 'unknown'; note?: string; verifiedAt?: string; source?: string };
   health: { status: 'healthy'; checkedAt: string };
 };
 
 const events: Array<{ name: EventName; sessionId: string; metadata: Record<string, unknown>; createdAt: string }> = [];
 const emailLeads = new Set<string>();
+const assistantRateLimits = new Map<string, { count: number; resetAt: number }>();
 const eventSchema = z
   .object({
     name: z.enum([
@@ -134,6 +143,7 @@ function allowedOrigin(): string {
 export function createApp() {
   const app = express();
   app.disable('x-powered-by');
+  app.set('trust proxy', 1);
   app.use(express.json({ limit: '32kb' }));
   app.use((_req: Request, res: Response, next: NextFunction) => {
     res.header('Access-Control-Allow-Origin', allowedOrigin());
@@ -168,6 +178,66 @@ export function createApp() {
       .filter((c) => c.health.status === 'healthy')
       .map((c) => ({ ...c.service, serviceUrl: c.health.resolvedUrl, imageUrl: c.service.imageUrl ? `/api/service-image/${c.service.id}` : '', health: c.health })));
     res.json({ services });
+  });
+
+  app.post('/api/assistant/chat', async (req, res) => {
+    const now = Date.now();
+    const windowMs = 15 * 60 * 1000;
+    if (assistantRateLimits.size >= 5000) {
+      for (const [key, entry] of assistantRateLimits) {
+        if (entry.resetAt <= now) assistantRateLimits.delete(key);
+      }
+    }
+    const requestedClientKey = req.ip || req.socket.remoteAddress || 'unknown';
+    const clientKey = !assistantRateLimits.has(requestedClientKey) && assistantRateLimits.size >= 5000
+      ? 'overflow'
+      : requestedClientKey;
+    const limit = assistantRateLimits.get(clientKey);
+    if (!limit || limit.resetAt <= now) {
+      assistantRateLimits.set(clientKey, { count: 1, resetAt: now + windowMs });
+    } else if (limit.count >= 12) {
+      res.setHeader('Retry-After', String(Math.ceil((limit.resetAt - now) / 1000)));
+      return res.status(429).json({ message: 'AI 추천 요청이 잠시 많아요. 잠시 후 다시 시도해 주세요.' });
+    } else {
+      limit.count++;
+    }
+    const input = parseAssistantRequest(req.body);
+    if (!input) return res.status(400).json({ message: '대화 요청 형식이 올바르지 않습니다.' });
+    try {
+      const { result, repository } = await getAssistantRecommendation(input, dedupedAllShuffles);
+      const recommendations = await Promise.all(result.recommendations.map(async (recommendation) => {
+        const service = dedupedAllShuffles.find((item) => item.id === recommendation.serviceId);
+        if (!service) return undefined;
+        const health = await checkServiceHealth(service.serviceUrl);
+        if (health.status !== 'healthy') return undefined;
+        return {
+          reason: recommendation.reason,
+          service: {
+            ...service,
+            serviceUrl: health.resolvedUrl,
+            imageUrl: service.imageUrl ? `/api/service-image/${service.id}` : '',
+            health,
+          },
+        };
+      }));
+      res.json({
+        reply: result.reply,
+        recommendations: recommendations.filter((item): item is NonNullable<typeof item> => Boolean(item)),
+        ...(repository ? { analyzedRepository: { url: repository.url, languages: repository.languages } } : {}),
+      });
+    } catch (error) {
+      if (error instanceof AssistantConfigurationError) {
+        return res.status(503).json({ message: 'AI 추천 기능이 아직 설정되지 않았어요.' });
+      }
+      if (error instanceof PublicRepositoryError) {
+        return res.status(400).json({ message: error.message });
+      }
+      if (error instanceof AssistantProviderError) {
+        return res.status(502).json({ message: error.message });
+      }
+      console.error('AI recommendation request failed.');
+      return res.status(500).json({ message: 'AI 추천 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요.' });
+    }
   });
 
   // See image-proxy.ts: fetches (and disk-caches) a real screenshot of the
@@ -308,6 +378,9 @@ export function createApp() {
   });
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (err && typeof err === 'object' && 'type' in err && err.type === 'entity.too.large') {
+      return res.status(413).json({ message: '요청이 너무 커요. 메시지와 저장소 입력을 줄여 주세요.' });
+    }
     console.error(err);
     res.status(500).json({ message: '잠시 후 다시 시도해 주세요.' });
   });

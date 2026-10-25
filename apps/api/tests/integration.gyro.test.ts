@@ -2,7 +2,7 @@ import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/server.js';
 import { catalog } from '../src/catalog.js';
-import { CATALOG_TASK_ENTRY_COUNT, taskCatalog } from '../src/catalogs/task.js';
+import { taskCatalog } from '../src/catalogs/task.js';
 
 describe('Gyro discovery API', () => {
   const app = createApp();
@@ -19,8 +19,7 @@ describe('Gyro discovery API', () => {
   });
 
   it('exposes the curated task catalog with compatible optional fields and forgiving filters', async () => {
-    expect(CATALOG_TASK_ENTRY_COUNT).toBeGreaterThanOrEqual(20);
-    expect(CATALOG_TASK_ENTRY_COUNT).toBeLessThanOrEqual(30);
+    expect(taskCatalog.length).toBeGreaterThan(0);
     expect(new Set(taskCatalog.map((service) => service.serviceUrl)).size).toBe(taskCatalog.length);
     for (const service of taskCatalog) {
       expect(service.kind).toBeTruthy();
@@ -91,13 +90,12 @@ describe('Gyro discovery API', () => {
     expect(unfiltered.body.services.length).toBe(mainstreamOnly.body.services.length + emergingOnly.body.services.length);
   });
 
-  it('provides 20–30 unique services for every theme and tier', async () => {
+  it('provides an expandable set of unique services for every theme and tier', async () => {
     for (const shuffle of ['sns', 'dating', 'productivity', 'game']) {
       for (const tier of ['mainstream', 'emerging']) {
         const response = await request(app).get(`/api/services?shuffle=${shuffle}&tier=${tier}`);
         expect(response.status).toBe(200);
-        expect(response.body.services.length).toBeGreaterThanOrEqual(20);
-        expect(response.body.services.length).toBeLessThanOrEqual(30);
+        expect(response.body.services.length).toBeGreaterThan(0);
         expect(new Set(response.body.services.map((service: { id: string }) => service.id)).size).toBe(response.body.services.length);
         expect(new Set(response.body.services.map((service: { serviceUrl: string }) => service.serviceUrl.trim().toLowerCase().replace(/\/+$/, ''))).size).toBe(response.body.services.length);
         expect(response.body.services.every((service: { tier?: string }) => (service.tier ?? 'mainstream') === tier)).toBe(true);
