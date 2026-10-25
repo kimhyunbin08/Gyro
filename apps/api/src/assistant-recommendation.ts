@@ -4,10 +4,10 @@ import { AssistantProviderError, copilotConfiguration, generateCopilotReply } fr
 export { AssistantBusyError, AssistantConfigurationError, AssistantProviderError } from './copilot-provider.js';
 
 const conversationSchema = z.object({
-  messages: z.array(z.object({
-    role: z.enum(['user', 'assistant']),
-    content: z.string().trim().min(1).max(1500),
-  })).min(1).max(12),
+  messages: z.array(z.discriminatedUnion('role', [
+    z.object({ role: z.literal('user'), content: z.string().trim().min(1).max(1500) }),
+    z.object({ role: z.literal('assistant'), content: z.string().trim().min(1).max(2500) }),
+  ])).min(1).max(12),
   techStack: z.string().trim().max(500).optional(),
   repoUrl: z.string().trim().max(300).optional(),
 });
@@ -99,7 +99,7 @@ async function loadPublicRepository(url: string): Promise<RepositoryContext> {
     fetchGitHubJson(`${apiBase}/readme`),
   ]);
   if (!repository || typeof repository !== 'object' || !('private' in repository)
-      || repository.private === true || !('description' in repository)
+      || repository.private !== false || !('description' in repository)
       || !languages || typeof languages !== 'object' || Array.isArray(languages)
       || !readme || typeof readme !== 'object' || !('content' in readme) || !('encoding' in readme)
       || readme.encoding !== 'base64' || typeof readme.content !== 'string') {
@@ -155,7 +155,7 @@ function compactService(service: CatalogService): Record<string, unknown> {
     tasks: service.tasks ?? [],
     kind: service.kind ?? 'service',
     verification: service.verification,
-    pricing: service.pricing ?? { model: 'unknown' },
+    pricing: service.pricing?.source && service.pricing.verifiedAt ? service.pricing : { model: 'unknown' },
   };
 }
 
@@ -198,10 +198,15 @@ export async function getAssistantRecommendation(
   const parsed = assistantResultSchema.safeParse(generated);
   if (!parsed.success) throw new AssistantProviderError('AI 추천 서비스 응답 형식이 올바르지 않습니다.');
   const candidateIds = new Set(candidates.map((service) => service.id));
+  const recommendedIds = new Set<string>();
   return {
     result: {
       ...parsed.data,
-      recommendations: parsed.data.recommendations.filter((item) => candidateIds.has(item.serviceId)).slice(0, 5),
+      recommendations: parsed.data.recommendations.filter((item) => {
+        if (!candidateIds.has(item.serviceId) || recommendedIds.has(item.serviceId)) return false;
+        recommendedIds.add(item.serviceId);
+        return true;
+      }),
     },
     repository,
   };

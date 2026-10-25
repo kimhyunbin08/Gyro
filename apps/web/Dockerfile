@@ -13,6 +13,7 @@ RUN npm ci --legacy-peer-deps
 
 # Copy source
 COPY apps/web/src apps/web/src
+COPY apps/web/tests apps/web/tests
 COPY apps/web/public apps/web/public
 COPY apps/web/index.html apps/web/
 COPY apps/web/tsconfig.json apps/web/

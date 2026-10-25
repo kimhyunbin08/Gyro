@@ -486,9 +486,12 @@ type CatalogService = {                             // 기존 필드에 아래 o
   `metadata: { serviceId: string; outcome: 'success'|'partial'|'fail'; reason?: ConnectionReason; agent?: string }`,
   `ConnectionReason = 'install_blocked'|'auth_issue'|'permission_issue'|'incompatible'|'docs_outdated'|'other'`.
   서버는 `outcome`/`reason` 허용값과 선택적 `agent` 길이를 검증하며 연결 결과 메타데이터는 허용 필드만 보존한다.
+  실패 이유는 `partial`/`fail`에만 허용하고 `success`와 함께 보내면 400을 반환한다.
   키·토큰·설정 파일 내용은 받지 않는다.
-- `GET /api/services/funnel`의 `FunnelEntry`에 `connection?: { success; partial; fail; reasons: Record<string, number> }`
+- `GET /api/services/funnel`의 `FunnelEntry`에
+  `connection?: { success; partial; fail; total; successRate: number | null; selfReported: true; reasons: Record<string, number> }`
   추가. `docClicks`는 별도 카운터(`service_click`의 `mode:'guide'`)로 분리하며 성공으로 합산하지 않는다.
+  `total = success + partial + fail`, `successRate = success / total`(0~1), 보고가 없으면 `null`이다.
   기존 필드·집계는 변경하지 않으며, 추천 점수·정렬에 사용하지 않는다.
 
 ### 11.3 프론트엔드
@@ -497,7 +500,8 @@ type CatalogService = {                             // 기존 필드에 아래 o
 - 카드: 유형 뱃지 + 검증 배지(링크/문서/설치 + 검증일). `kind`가 `skill`/`mcp`이면 "미리보기" 대신
   "연결 가이드" 패널(§11.1 `connection` 렌더링, 누락 값은 "확인 안 됨")을 연다.
 - 가이드 패널 하단에 선택적 연결 결과 폼(성공/일부 성공/실패 + 실패 이유 태그, 스킵·닫기 가능).
-  제출 실패가 UX를 막지 않는다(기존 이벤트 전송 방식과 동일하게 fire-and-forget).
+  전송 성공 후 닫고, 실패 시 선택을 유지한 채 오류와 재시도 버튼을 제공한다. 전송 중 중복 제출을 막고
+  스킵·닫기는 언제든 가능하다. 일부 성공에도 이유를 남길 수 있으며 성공을 고르면 이전 실패 이유를 지운다.
 - 외부 링크는 `rel="noopener noreferrer"`, 가이드의 외부 텍스트는 이스케이프(textContent)로 렌더링한다.
 - 랜딩은 `createCatalogLoader`의 기본(`vibe-venture`) 응답을 백그라운드에서 재사용한다. 검색은 이름·소개·
   태그·작업 문자열과 유형 필터로 클라이언트에서 처리하며 새 API나 검색어 이벤트를 추가하지 않는다.
@@ -518,6 +522,12 @@ type CatalogService = {                             // 기존 필드에 아래 o
 - Web: 연결 가이드 렌더링(누락 값 "확인 안 됨"), 스킬/MCP에서 iframe 미리보기 미노출, 검증 배지 표시.
 - Web: 검색어/유형 필터 매칭, 홈 카드 및 발견 메뉴, 설정 테마 적용과 저장.
 - Web: 공통 고정 헤더의 핵심 메뉴 레이블·화면별 활성 상태·Midnight 초기 테마를 검증한다.
+- Web: 중복 버튼/키보드 결정 방지, 애니메이션 중 화면 이동 시 취소, 라운드 내 1회 되돌리기·건너뛰기,
+  배치 거절 이유·미리보기 반복 닫기/응답/스킵/시간 초과, 랭킹 실패 후 빈 결과 복구, 별점 필수 및
+  피드백 전송 실패 상태를 검증한다. 웹 빌드에 TypeScript 검사도 포함한다.
+- 브라우저 검증 시 고정 헤더를 제외한 카드 프레임 안에 관심 없음·되돌리기·건너뛰기·관심 있음
+  버튼이 모두 들어오는지 모바일/데스크톱에서 확인한다. 카드 프레임은 공통 `.shell`의 최소 높이를
+  상속하지 않고 남은 뷰포트 높이를 사용한다.
 
 ### 11.5 롤아웃 및 이후 단계
 1) §11.1 스키마 + 수동 검수 큐레이션 + 카드/가이드 UI ✅ → 2) 검증 배지 ✅ → 3) 연결 결과 피드백·집계 ✅.
@@ -528,20 +538,25 @@ type CatalogService = {                             // 기존 필드에 아래 o
 
 ### 12.1 요청/응답
 - `POST /api/assistant/chat` 요청: `{ messages: [{ role: 'user'|'assistant', content: string }], techStack?: string, repoUrl?: string }`.
-  메시지는 1~12개, 각 1~1500자, 기술환경 500자 이하, 저장소 URL 300자 이하로 Zod 검증하며
-  Express JSON 본문 제한(32KB)을 함께 적용한다.
+  메시지는 1~12개, 사용자 입력은 1~1500자, 이전 assistant 응답은 1~2500자, 기술환경 500자 이하,
+  저장소 URL 300자 이하로 Zod 검증하며 Express JSON 본문 제한(32KiB)을 함께 적용한다.
+  브라우저는 성공한 최근 6턴(12메시지)만 메모리에 보관하고, 다음 요청은 과거 최대 5턴+새 사용자
+  입력으로 구성한다. UTF-8 JSON이 30KiB를 넘으면 가장 오래된 사용자/assistant 쌍부터 제거한다.
 - `repoUrl`은 HTTPS `github.com/{owner}/{repo}` URL만 허용한다. `api.github.com`의 공개 저장소,
   languages, README 엔드포인트에서 공개 정보만 가져오며 자격증명은 보내지 않는다. README 응답은 64KB
   제한, 모델에 전달하는 텍스트는 12,000자로 자른다. 다른 호스트·저장소 경로·비공개 저장소는 거부하고,
   코드를 실행하지 않는다.
 - 서버는 대화/기술환경/공개 README를 프롬프트에 넣어 GitHub Copilot SDK를 호출한다.
-  카탈로그 후보는 전체 검수 항목에서 어휘 일치 점수 상위 60개를 골라 모델 컨텍스트를 제한한다(카탈로그
-  자체의 개수 제한은 아니다). 후보 ID 밖의 생성 결과는 제거하고, 최대 5개 결과만 응답한다. 무작위
+  카탈로그 후보는 기존 발견 API와 같은 `healthyCatalog` 헬퍼로 헬스체크를 통과하고 원본·최종 공식 URL의
+  중복을 제거한 뒤 어휘 일치 점수 상위 60개를 골라 모델 컨텍스트를 제한한다(카탈로그
+  자체의 개수 제한은 아니다). 후보 ID 밖의 생성 결과와 중복 ID는 제거하고, 최대 5개 결과만 응답한다. 무작위
   서비스 ID나 카탈로그 외 추천은 표시하지 않는다.
 - 응답은 `{ reply, recommendations: [{ reason, service: Service }], analyzedRepository?: { url, languages } }`.
   추천 항목은 기존 헬스체크를 통과한 경우에만 포함한다. 가격 데이터 누락은 `unknown`으로 표시한다.
 - AI 설정·Copilot 인증 누락은 `503`, provider 오류/비정상 JSON은 `502`, 잘못된 요청·저장소 주소/접근 오류는 `400`,
   로컬 모드에서 외부 요청은 `403`, 요청 한도/동시 처리 초과는 `429`로 반환한다.
+- 잘못된 JSON은 본문을 로그에 남기지 않고 `400`, 크기 초과는 `413`으로 반환한다. 이벤트·이메일·
+  요청 제한 메모리는 `createApp()` 인스턴스별로 분리하며 영속 저장소를 도입하지 않는다.
 
 ### 12.2 개인정보·보안·운영
 - 로컬 인증 모드는 `GYRO_ASSISTANT_PROVIDER=copilot-local`, `NODE_ENV=development`, `COPILOT_MODEL` 명시 시에만 활성화한다.
@@ -584,4 +599,4 @@ type CatalogService = {                             // 기존 필드에 아래 o
 - API: 요청 스키마/한도, Copilot 설정 누락·오류, 응답 ID allowlist, 공개 GitHub URL 검증/메타데이터 전달,
   README 크기 제한, 비공개·외부 도메인 거부, 건강하지 않은 추천 제외를 mock fetch로 확인한다.
 - Web: 동의 전 전송 금지, 사용자/AI 다중 턴 표시, 카탈로그 추천 카드, 요금 미확인 표시, 오류 표시와
-  새 대화 초기화를 검증한다.
+  새 대화 초기화, 긴 한국어 응답을 포함한 UTF-8 요청 크기, 실패 입력 복원과 실패 턴 중복 방지를 검증한다.

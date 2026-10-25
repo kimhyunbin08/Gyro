@@ -84,6 +84,7 @@ describe('web unit: task discovery and connection guide', () => {
     document.querySelector<HTMLButtonElement>('[data-outcome="fail"]')!.click();
     document.querySelector<HTMLButtonElement>('[data-reason="auth_issue"]')!.click();
     document.querySelector<HTMLButtonElement>('.guide-report-submit')!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(overlay.classList.contains('hidden')).toBe(true);
     expect(events.some((event) => event.name === 'connection_report'
       && event.metadata.serviceId === mcpService.id
@@ -96,6 +97,66 @@ describe('web unit: task discovery and connection guide', () => {
     expect(document.getElementById('result-list')!.textContent).toContain('반복 보고서 자동화');
     document.querySelector<HTMLButtonElement>('[data-guide-result]')!.click();
     expect(overlay.classList.contains('hidden')).toBe(false);
+  });
+
+  it('keeps failed reports available for retry, clears stale failure reasons and ignores old submissions after reopening', async () => {
+    let fail = true;
+    let resolveReport: ((response: Response) => void) | undefined;
+    const reports: Array<{ metadata: Record<string, unknown> }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: string, init?: RequestInit) => {
+      if (input.includes('config.json')) return new Response(JSON.stringify({ apiUrl: 'http://localhost:3001' }));
+      if (input.includes('/api/services')) return new Response(JSON.stringify({ services: [mcpService] }));
+      if (input.includes('/api/events') && JSON.parse(String(init?.body)).name === 'connection_report') {
+        reports.push(JSON.parse(String(init?.body)));
+        if (fail) return new Response('{}', { status: 503 });
+        return new Promise<Response>((resolve) => { resolveReport = resolve; });
+      }
+      return new Response('{}');
+    }));
+    await loadAppModule();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    document.querySelector<HTMLButtonElement>('.home-product-title')!.click();
+    const overlay = document.getElementById('guide-overlay')!;
+    const submit = document.querySelector<HTMLButtonElement>('.guide-report-submit')!;
+    expect(submit.disabled).toBe(true);
+    document.querySelector<HTMLButtonElement>('[data-outcome="partial"]')!.click();
+    document.querySelector<HTMLButtonElement>('[data-reason="auth_issue"]')!.click();
+    submit.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(reports[0].metadata).toMatchObject({ outcome: 'partial', reason: 'auth_issue' });
+    expect(overlay.classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('guide-report')!.textContent).toContain('전송에 실패');
+    fail = false;
+    document.querySelector<HTMLButtonElement>('[data-outcome="success"]')!.click();
+    submit.click();
+    document.querySelector<HTMLButtonElement>('[data-outcome="fail"]')!.click();
+    submit.click();
+    expect(reports).toHaveLength(2);
+    expect(reports[1].metadata).toMatchObject({ outcome: 'success' });
+    expect(reports[1].metadata.reason).toBeUndefined();
+    document.getElementById('guide-close')!.click();
+    document.querySelector<HTMLButtonElement>('.home-product-title')!.click();
+    resolveReport!(new Response('{}'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(overlay.classList.contains('hidden')).toBe(false);
+  });
+
+  it('does not let an old task response replace a newer screen', async () => {
+    let resolveTask: ((response: Response) => void) | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+      if (input.includes('config.json')) return new Response(JSON.stringify({ apiUrl: 'http://localhost:3001' }));
+      if (input.includes('shuffle=task')) return new Promise<Response>((resolve) => { resolveTask = resolve; });
+      if (input.includes('/api/services')) return new Response(JSON.stringify({ services: [mcpService] }));
+      return new Response('{}');
+    }));
+    await loadAppModule();
+    document.getElementById('task-entry-button')!.click();
+    document.querySelector<HTMLButtonElement>('[data-task="report-automation"]')!.click();
+    document.getElementById('start-button')!.click();
+    resolveTask!(new Response(JSON.stringify({ services: [mcpService] })));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.getElementById('profile')!.classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('cards')!.classList.contains('hidden')).toBe(true);
   });
 
   it('keeps users on the task picker when no healthy task items are available', async () => {

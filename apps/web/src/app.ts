@@ -1,9 +1,9 @@
 import './styles.css';
 import { createCatalogLoader, type CatalogService as Service, type CatalogKind, type CatalogShuffle as ShuffleId, type CatalogTier as ServiceTier } from './catalog-loader.js';
 import { searchCatalogServices, type ServiceSearchKind } from './service-search.js';
+import { assistantRequest, type AssistantMessage } from './assistant-conversation.js';
 
 type Audience = 'student' | 'teacher' | 'parent' | 'other';
-type AssistantMessage = { role: 'user' | 'assistant'; content: string };
 type AssistantResponse = {
   reply: string;
   recommendations: Array<{ reason: string; service: Service }>;
@@ -121,9 +121,14 @@ function syncPrimaryNav(screen: string): void {
     else button.removeAttribute('aria-current');
   });
 }
-function show(id:string){screens.forEach(x => $(x).classList.toggle('hidden', x !== id));syncPrimaryNav(id);window.scrollTo({top:0,behavior:'smooth'});}
+function show(id:string){
+  if (id !== 'cards') cancelCardInteraction();
+  screens.forEach(x => $(x).classList.toggle('hidden', x !== id));
+  syncPrimaryNav(id);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
 function track(name:string, metadata:Record<string,unknown>={}){void fetch(`${API}/api/events`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,sessionId,metadata})}).catch(()=>{});}
-function startBatch(){ batchStart = index; batchEnd = Math.min(index + BATCH_SIZE, services.length); dislikedThisBatch = []; }
+function startBatch(){ batchStart = index; batchEnd = Math.min(index + BATCH_SIZE, services.length); dislikedThisBatch = []; history = []; }
 function renderChoices(){const audiences:[Audience,string][]=[['student','학생이에요'],['teacher','선생님이에요'],['parent','학부모예요'],['other','그 외예요']];$('audience-choices').innerHTML=audiences.map(([id,label])=>`<button class="choice ${audience===id?'selected':''}" data-audience="${id}">${label}</button>`).join(''); document.querySelectorAll<HTMLElement>('[data-audience]').forEach(b=>b.onclick=()=>{audience=b.dataset.audience as Audience;renderChoices();checkProfile();}); const tags=SHUFFLE_TAGS[currentShuffle];$('interest-choices').innerHTML=tags.map(tag=>`<button class="tag ${interests.has(tag)?'selected':''}" data-interest="${tag}">${tag}</button>`).join('');document.querySelectorAll<HTMLElement>('[data-interest]').forEach(b=>b.onclick=()=>{const tag=b.dataset.interest!;interests.has(tag)?interests.delete(tag):interests.add(tag);renderChoices();checkProfile();});}
 function checkProfile(){
   const next = $<HTMLButtonElement>('profile-next');
@@ -143,6 +148,20 @@ const SWIPE_COMMIT_PX = 110;
 const SWIPE_VELOCITY_PX_MS = 0.55;
 let dragging = false, dragStartX = 0, dragStartY = 0, dragX = 0, dragStartTime = 0;
 let wheelAccumX = 0, wheelResetTimer: number | undefined;
+let decisionTimer: number | undefined;
+let decisionPending = false;
+function cancelCardInteraction(): void {
+  window.clearTimeout(decisionTimer);
+  window.clearTimeout(wheelResetTimer);
+  decisionPending = false;
+  dragging = false;
+  dragX = 0;
+  wheelAccumX = 0;
+}
+function canDecide(): boolean {
+  return !$('cards').classList.contains('hidden') && index < batchEnd && !decisionPending
+    && $('preview-overlay').classList.contains('hidden') && $('guide-overlay').classList.contains('hidden');
+}
 function cardTransform(x:number, y:number){ const rotate = x / 18; return `translate(${x}px, ${y}px) rotate(${rotate}deg)`; }
 function setStampOpacity(card:HTMLElement, x:number){
   const like = card.querySelector<HTMLElement>('.swipe-stamp.like');
@@ -157,18 +176,23 @@ function resetCardPosition(card:HTMLElement){
   setStampOpacity(card, 0);
 }
 function flyOutCard(card:HTMLElement, direction:'like'|'dislike', onDone:()=>void){
+  if (!canDecide()) return;
+  decisionPending = true;
   const stage = $('swipe-stage');
   const distance = stage.clientWidth + 200;
   card.style.transition = 'transform .32s ease-out';
   card.style.transform = cardTransform(direction === 'like' ? distance : -distance, dragX ? dragX * 0.3 : 0);
   card.style.pointerEvents = 'none';
-  setTimeout(onDone, 260);
+  decisionTimer = window.setTimeout(() => {
+    decisionPending = false;
+    if (card.isConnected && !$('cards').classList.contains('hidden')) onDone();
+  }, 260);
 }
 function bindCardGestures(card:HTMLElement){
   card.style.transition = 'none';
   card.addEventListener('pointerdown', (e: PointerEvent) => {
-    if (index >= batchEnd) return;
-    if ((e.target as HTMLElement).closest('[data-preview]')) return;
+    if (!canDecide()) return;
+    if ((e.target as HTMLElement).closest('button, a')) return;
     dragging = true; dragStartX = e.clientX; dragStartY = e.clientY; dragX = 0; dragStartTime = performance.now();
     card.style.transition = 'none';
     card.setPointerCapture(e.pointerId);
@@ -193,14 +217,14 @@ function bindCardGestures(card:HTMLElement){
     }
   };
   card.addEventListener('pointerup', endDrag);
-  card.addEventListener('pointercancel', endDrag);
+  card.addEventListener('pointercancel', () => { dragging = false; resetCardPosition(card); });
 }
 // macOS/trackpad two-finger swipes fire as horizontal `wheel` events (no
 // touch events are involved), so they're handled separately from pointer drag.
 function bindWheelGestures(card:HTMLElement){
   const stage = $('swipe-stage');
   stage.onwheel = (e: WheelEvent) => {
-    if (index >= batchEnd || dragging) return;
+    if (!canDecide() || dragging) return;
     if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
     e.preventDefault();
     wheelAccumX += e.deltaX * -1;
@@ -412,7 +436,7 @@ function parseAssistantResponse(value: unknown): AssistantResponse | undefined {
   }
   return { reply: payload.reply, recommendations, ...(analyzedRepository ? { analyzedRepository } : {}) };
 }
-function appendAssistantMessage(role: AssistantMessage['role'], content: string): void {
+function appendAssistantMessage(role: AssistantMessage['role'], content: string): HTMLElement {
   const message = document.createElement('div');
   message.className = `assistant-message ${role === 'assistant' ? 'assistant-message-ai' : 'assistant-message-user'}`;
   if (role === 'assistant') {
@@ -428,8 +452,10 @@ function appendAssistantMessage(role: AssistantMessage['role'], content: string)
   const thread = $('assistant-thread');
   thread.append(message);
   thread.scrollTop = thread.scrollHeight;
+  return message;
 }
 function pricingLabel(service: Service): string {
+  if (!service.pricing?.source || !service.pricing.verifiedAt) return '요금 확인 필요';
   return ({
     free: '무료 확인',
     freemium: '무료 플랜 확인',
@@ -478,6 +504,7 @@ function appendAssistantRecommendations(recommendations: AssistantResponse['reco
   thread.scrollTop = thread.scrollHeight;
 }
 function renderCard(){
+  cancelCardInteraction();
   if (index >= batchEnd) { finishBatch(); return; }
   $('progress').textContent = `${index - batchStart + 1} / ${batchEnd - batchStart}`;
   const stage = $('swipe-stage');
@@ -492,14 +519,31 @@ function renderCard(){
   const card = stage.querySelector<HTMLElement>('.service-card')!;
   if (service.imageUrl) {
     const preload = new Image();
-    preload.onload = () => { card.style.backgroundImage = `url('${resolveImageUrl(service.imageUrl)}')`; card.classList.remove('image-fallback'); };
+    preload.onload = () => {
+      card.style.backgroundImage = `url('${resolveImageUrl(service.imageUrl)}')`;
+      card.classList.remove('image-fallback');
+      const description = document.createElement('span');
+      description.className = 'sr-only';
+      description.setAttribute('role', 'img');
+      description.setAttribute('aria-label', `${service.name} 화면 미리보기`);
+      card.append(description);
+    };
     preload.src = resolveImageUrl(service.imageUrl);
   }
   card.querySelector<HTMLButtonElement>('[data-preview], [data-guide]')!.onclick = (e) => { e.stopPropagation(); isGuideService(service) ? openGuide(service) : openPreview(service); };
   bindCardGestures(card);
   bindWheelGestures(card);
+  $<HTMLButtonElement>('undo-button').disabled = history.length === 0;
 }
-function decide(action:'like'|'dislike'|'skip'){if(index>=batchEnd)return;const service=services[index++];history.push({service,action});if(action==='like')liked.push(service);if(action==='dislike')dislikedThisBatch.push(service);track(action==='like'?'card_like':action==='dislike'?'card_dislike':'card_skip',{serviceId:service.id});renderCard();}
+function decide(action:'like'|'dislike'|'skip'){
+  if (!canDecide()) return;
+  const service = services[index++];
+  history = [{ service, action }];
+  if (action === 'like') liked.push(service);
+  if (action === 'dislike') dislikedThisBatch.push(service);
+  track(action === 'like' ? 'card_like' : action === 'dislike' ? 'card_dislike' : 'card_skip', { serviceId: service.id });
+  renderCard();
+}
 // prd.md §14.3 / trd.md §10.1 (Phase 2 draft): optional, skippable "why not
 // interested" micro-feedback. Asked once per round at the results screen
 // (not right after each dislike swipe) so the swipe flow is never
@@ -525,7 +569,16 @@ function bindDislikeReasons(){
     });
   });
 }
-function undo(){const last=history.pop();if(!last||index<=batchStart)return;index--;if(last.action==='like')liked=liked.filter(x=>x.id!==last.service.id);if(last.action==='dislike')dislikedThisBatch=dislikedThisBatch.filter(x=>x.id!==last.service.id);track('card_undo',{serviceId:last.service.id});renderCard();}
+function undo(){
+  if (!canDecide() || index <= batchStart) return;
+  const last = history.pop();
+  if (!last) return;
+  index--;
+  if (last.action === 'like') liked = liked.filter(service => service.id !== last.service.id);
+  if (last.action === 'dislike') dislikedThisBatch = dislikedThisBatch.filter(service => service.id !== last.service.id);
+  track('card_undo', { serviceId: last.service.id });
+  renderCard();
+}
 // §PRD 9-?: 한 라운드(스와이프 세션)가 끝나고 결과 화면에 들어선 뒤, 관심 표시한 서비스마다
 // 로그인 없이 별점(1~5)+코멘트를 남길 수 있다. 전송은 기존 익명 퍼널 이벤트 경로를 재사용한다.
 function feedbackWidgetHtml(serviceId:string):string{
@@ -540,15 +593,18 @@ function bindFeedbackWidgets(){
     const comment=box.querySelector<HTMLTextAreaElement>('.feedback-comment')!;
     const message=box.querySelector<HTMLElement>('.feedback-message')!;
     let rating=0;
+    let pending=false;
     stars.forEach(star=>{
       star.onclick=()=>{
+        if(pending)return;
         rating=Number(star.dataset.star);
         stars.forEach(s=>s.classList.toggle('active',Number(s.dataset.star)<=rating));
         submit.disabled=false;
       };
     });
     submit.onclick=async()=>{
-      if(rating===0)return;
+      if(rating===0||pending)return;
+      pending=true;
       submit.disabled=true;
       try{
         const r=await fetch(`${API}/api/events`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'service_feedback_submit',sessionId,metadata:{serviceId,rating,comment:comment.value.trim().slice(0,300)}})});
@@ -559,6 +615,8 @@ function bindFeedbackWidgets(){
       }catch{
         message.textContent='전송에 실패했어요. 다시 시도해주세요.';
         submit.disabled=false;
+      }finally{
+        pending=false;
       }
     };
   });
@@ -638,7 +696,9 @@ function externalLink(url: string, label: string): HTMLAnchorElement | null {
     return null;
   }
 }
+let guideGeneration = 0;
 function openGuide(service: Service): void {
+  const generation = ++guideGeneration;
   const guide = service.connection;
   const content = $('guide-content');
   const report = $('guide-report');
@@ -686,10 +746,11 @@ function openGuide(service: Service): void {
     ['incompatible', '호환되지 않음'], ['docs_outdated', '문서가 오래됨'], ['other', '기타'],
   ] as const;
   let selectedOutcome: 'success' | 'partial' | 'fail' | null = null;
+  let reportPending = false;
   let selectedReason: typeof reasonOptions[number][0] | undefined;
   const updateSelection = () => {
     outcomeGroup.querySelectorAll<HTMLButtonElement>('button').forEach(button => button.classList.toggle('selected', button.dataset.outcome === selectedOutcome));
-    reasonGroup.classList.toggle('hidden', selectedOutcome !== 'fail');
+    reasonGroup.classList.toggle('hidden', selectedOutcome !== 'fail' && selectedOutcome !== 'partial');
     reasonGroup.querySelectorAll<HTMLButtonElement>('button').forEach(button => button.classList.toggle('selected', button.dataset.reason === selectedReason));
   };
   for (const outcome of outcomes) {
@@ -698,7 +759,13 @@ function openGuide(service: Service): void {
     button.className = 'reason-chip';
     button.textContent = outcome.label;
     button.dataset.outcome = outcome.value;
-    button.onclick = () => { selectedOutcome = outcome.value; updateSelection(); };
+    button.onclick = () => {
+      if (reportPending) return;
+      selectedOutcome = outcome.value;
+      if (selectedOutcome === 'success') selectedReason = undefined;
+      submitButton.disabled = false;
+      updateSelection();
+    };
     outcomeGroup.append(button);
   }
   for (const [value, label] of reasonOptions) {
@@ -707,25 +774,43 @@ function openGuide(service: Service): void {
     button.className = 'reason-chip';
     button.textContent = label;
     button.dataset.reason = value;
-    button.onclick = () => { selectedReason = value; updateSelection(); };
+    button.onclick = () => { if (!reportPending) { selectedReason = value; updateSelection(); } };
     reasonGroup.append(button);
   }
   const submitButton = document.createElement('button');
   submitButton.type = 'button';
   submitButton.className = 'text-button guide-report-submit';
   submitButton.textContent = '익명으로 결과 보내기';
-  submitButton.onclick = () => {
-    if (!selectedOutcome) return;
+  submitButton.disabled = true;
+  const reportStatus = document.createElement('p');
+  reportStatus.setAttribute('role', 'status');
+  submitButton.onclick = async () => {
+    if (!selectedOutcome || reportPending) return;
+    reportPending = true;
     const metadata: Record<string, unknown> = { serviceId: service.id, outcome: selectedOutcome };
-    if (selectedReason) metadata.reason = selectedReason;
-    track('connection_report', metadata);
-    closeGuide();
+    if (selectedOutcome !== 'success' && selectedReason) metadata.reason = selectedReason;
+    submitButton.disabled = true;
+    reportStatus.textContent = '전송 중이에요...';
+    try {
+      const response = await fetch(`${API}/api/events`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'connection_report', sessionId, metadata }),
+      });
+      if (!response.ok) throw new Error('Connection report request failed');
+      if (generation === guideGeneration) closeGuide();
+    } catch {
+      reportStatus.textContent = '전송에 실패했어요. 다시 시도하거나 건너뛰어도 괜찮아요.';
+      submitButton.disabled = false;
+    } finally {
+      reportPending = false;
+    }
   };
-  report.append(title, outcomeGroup, reasonGroup, submitButton);
+  report.append(title, outcomeGroup, reasonGroup, submitButton, reportStatus);
   $('guide-overlay').classList.remove('hidden');
   $('guide-close').focus();
 }
 function closeGuide(): void {
+  guideGeneration++;
   $('guide-overlay').classList.add('hidden');
 }
 // Embedded preview: many student sites block iframe embedding via
@@ -775,6 +860,7 @@ function openPreview(service: Service){
 let retryIntentTimer: number | undefined;
 function requestClosePreview(){
   if (!previewService) { closePreview(); return; }
+  if (!$('retry-intent').classList.contains('hidden')) { closePreview(); return; }
   // Dwell time is recorded once, right as the user initiates closing (button,
   // Escape, or the preview-open timeout below) — regardless of whether they
   // go on to answer/skip the retry-intent question — so every preview close
@@ -805,20 +891,29 @@ function closePreview(){
 // Ranking: aggregated server-side from anonymous 'card_like' (right-swipe)
 // events, so it reflects everyone's choices, not just this session's.
 let rankingOrigin: 'landing' | 'results' = 'landing';
+let rankingLoadToken = 0;
 async function openRanking(origin: 'landing' | 'results'){
+  const token = ++rankingLoadToken;
+  profileLoadToken++;
+  taskLoadToken++;
   rankingOrigin = origin;
   show('ranking');
   const list = $('ranking-list');
   const empty = $('ranking-empty');
   list.innerHTML = '<li class="ranking-loading">불러오는 중...</li>';
   empty.classList.add('hidden');
+  empty.textContent = '아직 집계된 선택이 없어요. 먼저 서비스를 둘러보고 관심 있는 서비스에 스와이프해 주세요!';
   try {
     const r = await fetch(`${API}/api/services/ranking`);
+    if (!r.ok) throw new Error('Ranking request failed');
     const body = await r.json();
-    const ranking: Array<{id:string; name:string; tagline:string; serviceUrl:string; likeCount:number}> = body.ranking || [];
+    if (token !== rankingLoadToken) return;
+    if (!Array.isArray(body.ranking)) throw new Error('Invalid ranking response');
+    const ranking: Array<{id:string; name:string; tagline:string; serviceUrl:string; likeCount:number}> = body.ranking;
     if (ranking.length === 0) { list.innerHTML = ''; empty.classList.remove('hidden'); return; }
     list.innerHTML = ranking.map((s, i) => `<li class="ranking-item"><span class="ranking-rank">${i + 1}</span><div class="ranking-info"><strong>${s.name}</strong><p>${s.tagline}</p></div><span class="ranking-count">${s.likeCount}회 선택</span></li>`).join('');
   } catch {
+    if (token !== rankingLoadToken) return;
     list.innerHTML = '';
     empty.textContent = '랭킹을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
     empty.classList.remove('hidden');
@@ -914,6 +1009,7 @@ async function startTaskSearch(taskId: string): Promise<void> {
 startButton.disabled = false;
 startButton.textContent = startButtonDefaultText;
 function openProfile(shuffle: ShuffleId, tier?: ServiceTier) {
+  resetDiscovery();
   currentShuffle = shuffle;
   audience = null; interests = new Set();
   services = [];
@@ -966,11 +1062,13 @@ function selectTier(tier: ServiceTier | undefined){
   openProfile(pendingThemeShuffle, tier);
 }
 themeEntryButton.onclick = () => {
+  resetDiscovery();
   renderThemeChoices();
   show('theme');
 };
 const taskEntryButton = $<HTMLButtonElement>('task-entry-button');
 taskEntryButton.onclick = () => {
+  resetDiscovery();
   renderTaskChoices();
   $('task-status').textContent = '';
   show('task-discovery');
@@ -979,7 +1077,19 @@ taskEntryButton.onclick = () => {
 // every non-landing screen, plus the results screen's "처음부터 다시 보기"
 // button, all reset in-progress round state and return to landing. This is
 // always a manual, user-triggered navigation (never automatic).
-function goHome(){profileLoadToken++;taskLoadToken++;index=0;batchStart=0;batchEnd=0;liked=[];dislikedThisBatch=[];history=[];audience=null;interests.clear();selectedTask=null;currentShuffle='vibe-venture';pendingThemeShuffle=null;show('landing');}
+function resetDiscovery(): void {
+  profileLoadToken++;
+  taskLoadToken++;
+  cancelCardInteraction();
+  closePreview();
+  closeGuide();
+  index = 0; batchStart = 0; batchEnd = 0;
+  services = []; liked = []; dislikedThisBatch = []; history = [];
+  audience = null; interests = new Set(); selectedTask = null;
+  currentShuffle = 'vibe-venture';
+  pendingThemeShuffle = null;
+}
+function goHome(){ resetDiscovery(); show('landing'); }
 $('theme-back').onclick = goHome;
 $('task-back').onclick = goHome;
 $('tier-back').onclick = () => { renderThemeChoices(); show('theme'); };
@@ -989,8 +1099,13 @@ document.querySelectorAll<HTMLElement>('.home-logo').forEach(el=>{
 });
 document.querySelectorAll<HTMLButtonElement>('.home-button').forEach(el=>el.onclick=goHome);
 $('profile-next').onclick=()=>{if(!profileCatalogReady||services.length===0)return;services=[...services].sort((a,b)=>matchScore(b,audience,interests)-matchScore(a,audience,interests));track('profile_submit',{audience,interests:[...interests],shuffle:currentShuffle});startBatch();show('cards');renderCard();};
-function triggerDecision(action:'like'|'dislike'){ if(index>=batchEnd)return; const card=$('swipe-stage').querySelector<HTMLElement>('.service-card'); if(card) flyOutCard(card, action, () => decide(action)); else decide(action); }
+function triggerDecision(action:'like'|'dislike'){
+  if (!canDecide()) return;
+  const card=$('swipe-stage').querySelector<HTMLElement>('.service-card');
+  if(card) flyOutCard(card, action, () => decide(action)); else decide(action);
+}
 $('like-button').onclick=()=>triggerDecision('like');$('reject-button').onclick=()=>triggerDecision('dislike');$('undo-button').onclick=undo;$('swipe-stage').onkeydown=e=>{if(e.key==='ArrowRight')triggerDecision('like');if(e.key==='ArrowLeft')triggerDecision('dislike');if(e.key.toLowerCase()==='u')undo();};
+$('skip-button').onclick=()=>decide('skip');
 $('continue-button').onclick=()=>{startBatch();show('cards');renderCard();};
 $('restart-button').onclick=goHome;
 $('email-form').onsubmit=async e=>{e.preventDefault();const message=$('email-message');try{const r=await fetch(`${API}/api/email-leads`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$<HTMLInputElement>('email').value,updatesOptIn:$<HTMLInputElement>('updates').checked})});const body=await r.json();if(!r.ok)throw new Error(body.message);message.textContent='결과를 저장했어요.';track('email_submit',{updatesOptIn:$<HTMLInputElement>('updates').checked});}catch(error){message.textContent=error instanceof Error?error.message:'저장에 실패했어요.';}};
@@ -1022,22 +1137,24 @@ $('assistant-form').addEventListener('submit', async (event) => {
     return;
   }
 
-  assistantMessages.push({ role: 'user', content });
+  const userMessage: AssistantMessage = { role: 'user', content };
   $('landing').classList.add('has-assistant-conversation');
-  appendAssistantMessage('user', content);
+  const messageElement = appendAssistantMessage('user', content);
   messageInput.value = '';
   assistantRequestPending = true;
   $<HTMLButtonElement>('assistant-send').disabled = true;
+  $<HTMLButtonElement>('assistant-reset').disabled = true;
+  let completed = false;
   status.textContent = '문제와 맞는 서비스를 살펴보고 있어요...';
   try {
     const response = await fetch(`${API}/api/assistant/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: assistantMessages.slice(-12),
-        techStack: $<HTMLInputElement>('assistant-tech-stack').value.trim(),
-        repoUrl: $<HTMLInputElement>('assistant-repo-url').value.trim(),
-      }),
+      body: JSON.stringify(assistantRequest(
+        assistantMessages, userMessage,
+        $<HTMLInputElement>('assistant-tech-stack').value.trim(),
+        $<HTMLInputElement>('assistant-repo-url').value.trim(),
+      )),
     });
     const payload: unknown = await response.json();
     if (!response.ok) {
@@ -1052,7 +1169,9 @@ $('assistant-form').addEventListener('submit', async (event) => {
       status.textContent = 'AI 추천 응답을 확인할 수 없어요. 다시 시도해 주세요.';
       return;
     }
-    assistantMessages.push({ role: 'assistant', content: result.reply });
+    assistantMessages.push(userMessage, { role: 'assistant', content: result.reply });
+    if (assistantMessages.length > 12) assistantMessages.splice(0, assistantMessages.length - 12);
+    completed = true;
     appendAssistantMessage('assistant', result.reply);
     appendAssistantRecommendations(result.recommendations);
     status.textContent = result.analyzedRepository
@@ -1063,6 +1182,12 @@ $('assistant-form').addEventListener('submit', async (event) => {
   } finally {
     assistantRequestPending = false;
     $<HTMLButtonElement>('assistant-send').disabled = false;
+    $<HTMLButtonElement>('assistant-reset').disabled = false;
+    if (!completed) {
+      messageElement.remove();
+      if (!messageInput.value) messageInput.value = content;
+      $('landing').classList.toggle('has-assistant-conversation', assistantMessages.length > 0);
+    }
   }
 });
 $('assistant-reset').addEventListener('click', () => {
