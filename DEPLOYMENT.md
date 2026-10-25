@@ -27,6 +27,9 @@ azd up --environment gyro
 
 현재 배포 환경에서는 원격 Docker 빌드와 기존 ACR(`acrdu6ob5u24hia6.azurecr.io`)을 사용합니다. ACR이 다른 리소스 그룹에 있으면 각 Container App 시스템 ID에 `AcrPull` 역할을 부여한 뒤 `azd deploy`를 실행해야 합니다.
 
+Actions 배포도 웹 리비전에 `GYRO_API_URL`을 실제 API FQDN으로 주입합니다. 빌드 인수 `VITE_API_URL`만
+설정하면 런타임 `config.json`이 기본 localhost 주소로 덮어쓰므로 충분하지 않습니다.
+
 ## 공개 API
 
 - `GET /health`
