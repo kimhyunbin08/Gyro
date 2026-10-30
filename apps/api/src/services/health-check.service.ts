@@ -1,3 +1,9 @@
+import { lookup as dnsLookup } from 'node:dns/promises';
+import type { LookupFunction } from 'node:net';
+import { isIP } from 'node:net';
+import ipaddr from 'ipaddr.js';
+import { Agent } from 'undici';
+
 export type HealthStatus = 'healthy' | 'unhealthy';
 export type HealthCheckResult = {
   status: HealthStatus;
@@ -11,26 +17,102 @@ export type HealthCheckResult = {
 
 export const HEALTH_CHECK_INTERVAL_MS = 10 * 60 * 1000;
 const CHECK_TIMEOUT_MS = 4000;
+const MAX_REDIRECTS = 8;
 type CacheEntry = HealthCheckResult & { expiresAt: number };
 const cache = new Map<string, CacheEntry>();
 const inFlight = new Map<string, Promise<HealthCheckResult>>();
+
+export function isPublicHealthCheckAddress(address: string): boolean {
+  try {
+    const parsed = ipaddr.parse(address);
+    if (parsed instanceof ipaddr.IPv6 && parsed.isIPv4MappedAddress()) {
+      return parsed.toIPv4Address().range() === 'unicast';
+    }
+    return parsed.range() === 'unicast';
+  } catch {
+    return false;
+  }
+}
+
+function validateTarget(target: URL): void {
+  if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password) {
+    throw new Error('Invalid health check destination');
+  }
+  const hostname = target.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local')) {
+    throw new Error('Private health check destination is not allowed');
+  }
+  if (isIP(hostname) && !isPublicHealthCheckAddress(hostname)) {
+    throw new Error('Private health check destination is not allowed');
+  }
+}
+
+const pinnedPublicLookup: LookupFunction = (hostname, options, callback) => {
+  void dnsLookup(hostname, { all: true, verbatim: true }).then((addresses) => {
+    if (addresses.length === 0 || addresses.some(({ address }) => !isPublicHealthCheckAddress(address))) {
+      throw new Error('Private health check destination is not allowed');
+    }
+    if (options && typeof options === 'object' && 'all' in options && options.all) {
+      callback(null, addresses);
+    } else {
+      const first = addresses[0];
+      callback(null, first.address, first.family);
+    }
+  }).catch((error: unknown) => {
+    const lookupError = error instanceof Error ? error as NodeJS.ErrnoException : new Error(String(error));
+    callback(lookupError, '', 0);
+  });
+};
+
+async function requestWithSafeRedirects(sourceUrl: string, method: 'HEAD' | 'GET', signal: AbortSignal) {
+  let destination = new URL(sourceUrl);
+  for (let redirects = 0; ; redirects++) {
+    validateTarget(destination);
+    const dispatcher = new Agent({ connect: { lookup: pinnedPublicLookup } });
+    let response: Response;
+    try {
+      response = await fetch(destination.href, {
+        method,
+        redirect: 'manual',
+        signal,
+        dispatcher,
+      } as RequestInit & { dispatcher: Agent });
+    } catch (error) {
+      await dispatcher.close();
+      throw error;
+    }
+    try {
+      const location = response.headers?.get('location');
+      if ([301, 302, 303, 307, 308].includes(response.status) && location) {
+        await response.body?.cancel();
+        if (redirects >= MAX_REDIRECTS) throw new Error('Too many health check redirects');
+        const nextDestination = new URL(location, destination);
+        if (destination.protocol === 'https:' && nextDestination.protocol !== 'https:') {
+          throw new Error('HTTPS health check redirects cannot downgrade to HTTP');
+        }
+        destination = nextDestination;
+        continue;
+      }
+      await response.body?.cancel();
+      return { status: response.status, ok: response.ok, url: destination.href };
+    } finally {
+      await dispatcher.close();
+    }
+  }
+}
 
 async function refresh(sourceUrl: string): Promise<HealthCheckResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
   let result: HealthCheckResult;
   try {
-    let response = await fetch(sourceUrl, { method: 'HEAD', redirect: 'follow', signal: controller.signal });
+    const original = new URL(sourceUrl);
+    validateTarget(original);
+    let response = await requestWithSafeRedirects(original.href, 'HEAD', controller.signal);
     if (response.status === 405 || response.status === 501) {
-      await response.body?.cancel();
-      response = await fetch(sourceUrl, { method: 'GET', redirect: 'follow', signal: controller.signal });
+      response = await requestWithSafeRedirects(original.href, 'GET', controller.signal);
     }
-    await response.body?.cancel();
-    const destination = new URL(response.url || sourceUrl);
-    if (!['http:', 'https:'].includes(destination.protocol) || destination.username || destination.password) {
-      throw new Error('Invalid redirect destination');
-    }
-    const resolvedUrl = response.ok ? destination.href : sourceUrl;
+    const resolvedUrl = response.ok ? response.url : sourceUrl;
     result = {
       status: response.ok ? 'healthy' : 'unhealthy',
       checkedAt: new Date().toISOString(),

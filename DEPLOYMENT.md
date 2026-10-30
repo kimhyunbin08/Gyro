@@ -12,6 +12,18 @@ docker compose up --build
 
 - Web: http://localhost:3002
 - API health: http://localhost:3001/health
+- PostgreSQL: Docker volume `gyro-postgres`에 영속 저장됩니다.
+
+창업가 스키마는 서버 시작 시 자동 변경되지 않습니다. 먼저 API를 빌드한 뒤 migration을 한 번 실행합니다.
+
+```bash
+npm run build
+docker compose up -d database
+docker compose run --build --rm api npm run db:migrate
+docker compose up --build
+```
+
+애플리케이션은 `.env` 파일을 자동으로 로드하지 않습니다. 로컬 창업가 로그인을 시험하려면 실제 GitHub OAuth 앱 callback(`http://localhost:3001/api/builder/auth/github/callback`), SMTP 계정, 법적 설정을 프로세스 환경에 명시적으로 전달해야 합니다. `BUILDER_PLATFORM_ENABLED=true`, `LEGAL_REVIEW_APPROVED=true`는 완성된 약관·개인정보 처리방침과 운영자 정보를 검토한 뒤에만 사용하세요. 예시 정책 문구는 정식 법률 문서가 아니며, 빠진 설정은 창업가 기능을 비활성화합니다.
 
 ## Azure 배포
 
@@ -37,8 +49,20 @@ Actions 배포도 웹 리비전에 `GYRO_API_URL`을 실제 API FQDN으로 주�
 - `POST /api/assistant/chat`
 - `POST /api/events`
 - `POST /api/email-leads`
+- `/api/builder/*` (GitHub OAuth/매직 링크, 프로필, 제출·검수; 아래 필수 설정이 모두 준비된 경우에만)
 
 실제 학생 작품은 권한이 확인된 공식 링크만 카탈로그에 넣고, iframe이나 원본 복제는 사용하지 않습니다. 이메일은 결과 저장 목적과 소식 수신 동의를 분리합니다.
+
+### 창업가 플랫폼 출시 게이트
+
+창업가 API는 PostgreSQL migration, HTTPS `WEB_ORIGIN`, GitHub OAuth 앱, SMTP, moderator 이메일 목록, 실제 운영 주체/연락처,
+개인정보 및 이용약관 버전, AI 처리자 고지, 보유기간, 국내 법률 검토, `BUILDER_PLATFORM_ENABLED=true`와
+`LEGAL_REVIEW_APPROVED=true`가 함께 준비되어야 활성화됩니다. 비밀 환경값은 GitHub/Azure secret reference로만 전달하고
+웹 번들에는 넣지 않습니다. Azure Bicep은 이 외부 DB·메일·OAuth 자원을 자동으로 만들거나 자격 증명을 설정하지 않습니다.
+현재 `privacy.html`/`terms.html`은 처리 흐름 설명용 초안이므로 법적 게시물이나 배포 승인으로 간주하지 마세요.
+
+현재 배포 workflow는 이 builder 자원과 설정을 공급하지 않습니다. 운영 DB/메일/OAuth credentials 및 법률 문서가
+준비되기 전에는 builder 기능을 활성화하지 말고, 필수 설정 없이 프로덕션 환경에 연결된 상태라고 주장하지 마세요.
 
 ## 대화형 AI 설정
 
