@@ -44,6 +44,37 @@ describe('checkServiceHealth', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('rejects private literal destinations and redirects before issuing another request', async () => {
+    process.env.NODE_ENV = 'production';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 302,
+      headers: new Headers({ location: 'http://127.0.0.1/admin' }),
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const { checkServiceHealth, isPublicHealthCheckAddress } = await import('../src/services/health-check.service.js');
+
+    expect(isPublicHealthCheckAddress('8.8.8.8')).toBe(true);
+    expect(isPublicHealthCheckAddress('::ffff:127.0.0.1')).toBe(false);
+    expect(isPublicHealthCheckAddress('fd00::1')).toBe(false);
+    expect((await checkServiceHealth('http://127.0.0.1')).status).toBe('unhealthy');
+    expect((await checkServiceHealth('https://public-redirect.example')).status).toBe('unhealthy');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects HTTPS redirects that downgrade to HTTP', async () => {
+    process.env.NODE_ENV = 'production';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 301,
+      headers: new Headers({ location: 'http://public-target.example/' }),
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const { checkServiceHealth } = await import('../src/services/health-check.service.js');
+    expect((await checkServiceHealth('https://secure-source.example')).status).toBe('unhealthy');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it('rechecks expired entries before exposing a dead service and recovers on the next check', async () => {
     process.env.NODE_ENV = 'production';
     vi.useFakeTimers();
@@ -77,9 +108,12 @@ describe('checkServiceHealth', () => {
     }
   });
 
-  it('records a successful redirect, shares concurrent checks and keeps checking the original URL', async () => {
+  it('records manually followed redirects, shares concurrent checks and keeps checking the original URL', async () => {
     process.env.NODE_ENV = 'production';
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, url: 'https://new.example/app' });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 302, headers: new Headers({ location: 'https://new.example/app' }) })
+      .mockResolvedValueOnce({ ok: true, status: 200 })
+      .mockResolvedValueOnce({ ok: false, status: 404 });
     globalThis.fetch = fetchMock;
     const { checkServiceHealth, resolveServiceUrl } = await import('../src/services/health-check.service.js');
     const [first, concurrent] = await Promise.all([
@@ -88,11 +122,10 @@ describe('checkServiceHealth', () => {
     ]);
     expect(first).toEqual(concurrent);
     expect(first).toMatchObject({ sourceUrl: 'https://old.example', resolvedUrl: 'https://new.example/app', urlChanged: true, httpStatus: 200 });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(resolveServiceUrl('https://old.example')).toBe('https://new.example/app');
-    fetchMock.mockResolvedValue({ ok: false, status: 404, url: 'https://new.example/app' });
     expect((await checkServiceHealth('https://old.example', true)).resolvedUrl).toBe('https://old.example');
-    expect(fetchMock.mock.calls[1][0]).toBe('https://old.example');
+    expect(fetchMock.mock.calls[2][0]).toBe('https://old.example/');
     expect(resolveServiceUrl('https://old.example')).toBe('https://old.example');
   });
 

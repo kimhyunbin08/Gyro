@@ -1,4 +1,4 @@
-# TRD: Gyro 대화형 AI 서비스 발견 Web MVP (v1.1)
+# TRD: Gyro 익명 발견 및 창업가 검증 플랫폼 (v1.2)
 
 ## 1. 문서 목적
 - `prd.md`를 구현 가능한 기술 요구사항으로 고정한다.
@@ -18,6 +18,9 @@
 6. 홈 대화형 서비스 발견과 GitHub Copilot SDK 연동(`prd.md` §9-8 승격, 상세 §12). 추천 후보는 수동 검수된
    카탈로그에서만 선택하고, 공개 GitHub 정보 분석은 공개 API의 저장소 설명·언어·README로 제한한다.
 7. 출처·라이선스·확인일·요금 확인 상태를 기록하는 상한 없는 수동 검수 카탈로그.
+8. 창업가 전용 인증(GitHub OAuth + 이메일 매직 링크), 최소 프로필, 비공개 서비스 제출·수정 및
+   운영자 수동 검수/공개 관리(§13). 일반 발견 사용자는 무계정 상태를 유지한다.
+9. 개인정보 처리방침/이용약관/AI·외부 처리자 고지와 필수 운영 설정 누락 시 공개 기능 차단(§13).
 
 ### 2.2 Out of Scope (Deferred)
 1. 로그인/회원가입, 사용자 계정/프로필 영속화.
@@ -26,15 +29,15 @@
 4. 비공개 GitHub 저장소 접근, 임의 웹사이트 수집, 카탈로그 후보 자동 공개, AI에 의한 카탈로그 수정.
 
 > Phase 2("검증 루프") 설계 초안 중 §14.3(계정 불필요 항목)은 구현되어 §2.1 #4로 승격되었다.
-> §14.4(빌더 계정 필요 항목)의 기술 설계는 §10에 별도로 정리되어 있으며, 아직 구현되지 않았다.
-> §10이 실제 반영되기 전까지는 위 Out of Scope 항목이 그대로 유효하다.
+> 빌더 계정/검수 제출은 기존 §10.2 초안을 대체하는 §13 요구사항으로 승격되었다. 결제·유료 리포트는
+> 계속 Out of Scope이며, §13의 실제 인프라/운영 설정이 충족되기 전에는 공개 운영을 활성화하지 않는다.
 
 ## 3. 기술 스택
 1. **Frontend**: TypeScript + Vite, 순수 DOM 조작(프레임워크 없음), `fetch`로 API 호출.
 2. **Backend API**: Node.js + Express 5 + Zod(입력 검증) + TypeScript(ESM).
-3. **Data/Storage**: 현재는 검수된 정적 카탈로그 TypeScript 데이터 + 인메모리 이벤트/이메일 저장소.
-   항목 수 상한은 없으며, catalog source adapter로 분리 가능한 모듈 경계를 유지한다. 대화/추천 로그는
-   저장하지 않는다. 별도 데이터베이스는 아직 없다.
+3. **Data/Storage**: 공개 정적 카탈로그 TypeScript 데이터와 익명 이벤트/이메일 인메모리 저장소를 유지한다.
+   빌더 계정/연결 identity/세션/제출/검수 기록은 PostgreSQL에 영속 저장하며, DB 설정이 없으면 builder
+   API는 `503`으로 명시 실패한다. AI 대화/추천 로그는 저장하지 않는다.
 4. **배포**: Azure Container Apps 2개(web/api), ACR 원격 빌드(`azd up`). `DEPLOYMENT.md` 참고.
 
 ## 4. 아키텍처 개요
@@ -353,12 +356,12 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
    배포 시 `COPILOT_GITHUB_TOKEN`을 사용한다. 설정 미완료는 `503`, 모델 오류는
    `502`로 반환하며 대체 성공 응답을 만들지 않는다.
 
-## 10. Phase 2 — "검증 루프" 기술 설계 초안 (§10.1 구현 완료, §10.2 이후 미구현)
+## 10. Phase 2 — "검증 루프" 구 기술 설계 (이력 전용)
 
 > `prd.md` §14의 요구사항 초안에 대응하는 기술 설계 초안이다. §10.1(§14.3, 계정 불필요)은
 > **구현 완료**되어 §2.1/§5.1/§5.2/§6.3/§6.6/§7로 승격되었다(이 하위 섹션은 구현 기록으로 유지).
-> §10.2(§14.4, 빌더 계정 필요) 이후는 여전히 **미구현**이다. 착수 시 해당 설계를 §2~§7로 승격하고
-> 이 섹션은 제거(또는 "완료"로 표시)한다.
+> §10.1의 계정 불필요 기능은 구현 기록으로 유지한다. §10.2~§10.4는 폐기된 초안이며 현재 요구사항/실행 순서가
+> 아니다. 창업가 인증·저장·검수의 현재 계약은 §13만을 따른다.
 
 ### 10.1 §14.3 (계정 불필요) — API 스키마 변경 없이 수용 가능 — ✅ 구현 완료
 - `card_dislike` 이벤트의 `metadata`에 `reason?: string` 필드를 추가한다. `eventSchema`의
@@ -377,7 +380,11 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
   재집계하는 읽기 전용 엔드포인트 `GET /api/services/funnel`로 구현했다 — 새 저장소 없이 기존
   인메모리 이벤트 스토어만 재사용한다(§5.2 #5, §6.6).
 
-### 10.2 §14.4 (빌더 계정 필요) — 아키텍처 전제 변경 필요
+### 10.2 폐기된 빌더 계정 초안 (요구사항 아님; §13으로 대체)
+
+> 아래 내용은 현재 설계가 아니다. 특히 인증 방식 미확정, 서비스 버전/A/B 실험, feedback portal, 유료 리포트,
+> 소유자용 원시 피드백은 구현하지 않는다. 운영 구현은 §13의 GitHub OAuth + 이메일 매직 링크, PostgreSQL,
+> 수동 검수와 승인된 서비스만 공개하는 계약을 사용한다.
 - **인증**: 빌더 인증 방식은 미확정(매직링크 이메일 / GitHub OAuth / 바이브벤처 기관 발급 코드 등
   `ideation.md` §8 오픈 퀘스천 참고). 어떤 방식이든 발견 사용자 플로우(`landing/profile/cards/
   results/ranking`)와는 완전히 분리된 신규 라우트(`/builder/*`)로 설계해 기존 무로그인 플로우에
@@ -423,7 +430,7 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
   "서비스별 결제·예약 연동 금지"가 금지하는 카탈로그 서비스 자체의 결제가 아니라 플랫폼의 자체
   유료 기능이므로 범위상 구분된다.
 
-### 10.3 테스트 전략 확장(초안)
+### 10.3 폐기된 테스트 제안 (이력 전용)
 - §10.1 항목 — ✅ 구현 완료. `integration.gyro.test.ts`에 `metadata.reason`/`metadata.retryIntent`
   포함 후속 이벤트가 `202`로 수락되는지, `GET /api/services/funnel`이 `stage` 태그로 기본 카운트와
   이유/의향 집계를 분리(이중 집계 방지)하는지 검증하는 테스트를 추가했다(스키마 변경이 없어 기존
@@ -431,7 +438,7 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
 - §10.2 항목은 영속 저장소(DB) 도입이 선행되어야 하므로, 테스트 전략도 그때 함께 설계한다(예:
   테스트용 임시 DB 파일/인메모리 SQLite 등 — 현재는 미확정).
 
-### 10.4 롤아웃 순서 제안
+### 10.4 폐기된 롤아웃 제안 (이력 전용; 현재 순서는 적용하지 않음)
 1. ✅ §10.1(API 확장 없음) → 프론트엔드 UI만 추가, 가장 낮은 리스크. (완료)
 2. ✅ §10.1의 `GET /api/services/funnel` 신규 엔드포인트 추가. (완료)
 3. §10.2 착수 전 ADR 작성: 인증 방식 확정, DB 선택, 기존 "DB 없음" 전제를 깨는 것에 대한 합의.
@@ -600,3 +607,105 @@ type CatalogService = {                             // 기존 필드에 아래 o
   README 크기 제한, 비공개·외부 도메인 거부, 건강하지 않은 추천 제외를 mock fetch로 확인한다.
 - Web: 동의 전 전송 금지, 사용자/AI 다중 턴 표시, 카탈로그 추천 카드, 요금 미확인 표시, 오류 표시와
   새 대화 초기화, 긴 한국어 응답을 포함한 UTF-8 요청 크기, 실패 입력 복원과 실패 턴 중복 방지를 검증한다.
+
+### 12.5 §10.2 초안의 상태
+- 기존 §10.2의 builder account/schema/endpoints 초안은 본 §13으로 대체한다. 과거 draft의 무료/유료 리포트,
+  A/B 실험, 미확정 인증 선택지는 현재 요구사항으로 해석하지 않는다.
+
+## 13. 창업가 플랫폼 기술 설계 및 구현
+
+### 13.1 경계와 영속 데이터
+- API는 기존 발견자 라우트와 `/api/builder/*`를 분리한다. 방문자 플로우는 로그인 상태를 확인하거나
+  저장하지 않으며, 창업가 계정 데이터와 익명 방문자 이벤트는 서로 연결하지 않는다.
+- PostgreSQL 최소 테이블: `builders`, `builder_identities`, `builder_sessions`, `service_submissions`,
+  `submission_revisions`, `moderation_reviews`, `consent_records`. 외래 키·unique constraints·상태 check
+  constraints를 적용한다. 모든 조회/수정 쿼리는 authenticated builder id 또는 moderator scope로 제한한다.
+- OAuth access/refresh token은 계정 식별 후 즉시 폐기하고 보관하지 않는다. email token/session은 무작위
+  고엔트로피 값이며 DB에는 해시만 저장한다. 인증/세션 데이터는 별도 만료/삭제를 지원한다.
+- DB migration은 버전 관리하며 앱 시작 때 임의로 스키마를 변경하지 않는다. 배포 전 migration job 또는
+  명시적 운영 단계를 실행한다. 백업·복구·암호화·지역은 데이터베이스 운영자와 계약이 확정되기 전까지
+  미해결 배포 게이트다.
+- 구현 migration은 `apps/api/migrations/001_builder_platform.sql`이며, `npm run -w apps/api db:migrate`로
+  명시 적용한다. 프로덕션 환경의 스키마 자격 증명/백업·복구 확인은 앱 배포 권한과 분리한다.
+
+### 13.2 API 계약
+| 메서드/경로 | 동작 | 인증/권한 |
+|---|---|---|
+| `GET /api/builder/auth/providers` | GitHub/email provider 준비 상태 반환(비밀값 제외) | 공개 |
+| `POST /api/builder/auth/email` | 만 14세 이상/정책 버전 확인 및 1회용 매직 링크 이메일 발송 | 공개·rate-limited |
+| `POST /api/builder/auth/email/verify` | 만료/1회 사용 토큰 검증, 세션 설정(토큰을 요청 본문으로만 전달) | token |
+| `GET /api/builder/auth/github` | state/nonce 생성 후 OAuth 이동 | 공개 |
+| `GET /api/builder/auth/github/callback` | state 검증 및 신원 확인 후 세션 설정 | OAuth callback |
+| `POST /api/builder/auth/logout` | 현재 세션 폐기 | builder + CSRF |
+| `GET/PATCH/DELETE /api/builder/me` | 최소 프로필/연결 identity 조회·수정/탈퇴 요청 | builder + CSRF |
+| `GET/POST /api/builder/services` | 내 제출 목록/새 초안 생성 | builder + CSRF |
+| `GET/PATCH /api/builder/services/:id` | 소유한 초안 조회·수정 | builder + ownership; PATCH는 CSRF |
+| `POST /api/builder/services/:id/submit` | 소유 초안을 검토 대기 상태로 전환 | builder + ownership + CSRF |
+| `DELETE /api/builder/services/:id` | 소유 제출물 삭제 및 공개판에서 제거 | builder + ownership + CSRF |
+| `GET /api/builder/moderation/submissions?status=...` | 검토 대기/승인/반려/정지 큐 | moderator |
+| `POST /api/builder/moderation/submissions/:id` | 승인/반려/정지 및 사유 기록 | moderator + CSRF |
+
+미등록 provider/미설정 mail transport/DB 연결 오류는 `503`, 인증 실패는 `401`, 권한 없음은 `403`,
+유효하지 않은 입력은 `400`, rate limit은 `429`를 반환한다. 성공 형태의 대체 응답이나 로컬 메모리 저장은 금지한다.
+
+### 13.3 인증·보안
+- GitHub OAuth callback은 설정된 callback URL로 제한하고, state는 1회성·10분 만료로 DB 저장하며
+  `HttpOnly`, `SameSite=Lax` 브라우저 쿠키와 callback 값을 일치 검증한다. OAuth 응답에서 GitHub user id와
+  verified primary email을 확인하며 access token은 저장하지 않는다.
+- 이메일 매직 링크는 1회 사용·15분 만료·IP 및 이메일 기반 발송 한도를 적용하고, 토큰 평문을 로그/DB에
+  기록하지 않는다. SMTP 미설정/전송 실패는 구체적인 서버 오류와 재시도 가능한 사용자 메시지로 처리한다.
+- 세션은 DB 저장 해시 + 7일 만료 `HttpOnly`, production의 `Secure`, `SameSite=Lax` 쿠키로 구성하며 HTTPS 아닌 production은 거부한다.
+  상태 변경 요청에 CSRF token 및 허용 Origin 검증을 적용한다. production CORS는 설정된 web origin만 허용한다.
+- `moderator` 계정은 `BUILDER_MODERATOR_EMAILS` allowlist/관리 절차로 지정한다. 가입한 모든 builder에게
+  moderation 권한을 부여하지 않는다. 모든 대상 resource id는 소유권을 서버에서 확인하고 IDOR 회귀 테스트를 둔다.
+- 로그에는 인증 token, code, email link, request body, submitted secrets, prompts, README를 남기지 않는다.
+  OAuth/login/submission/admin route는 크기 제한, schema validation, throttling, audit events를 적용한다.
+
+### 13.4 제출·승인·URL 검사
+- 사용자 제출은 PostgreSQL에서 `draft`, `pending_review`, `approved`, `rejected`, `suspended`
+  상태로 관리한다. 공개 catalog adapter는 승인 snapshot만 공개하고 기존 `GET /api/services` 계약은 유지한다.
+- 승인 서비스의 수정/재검수 중에는 직전 승인 snapshot을 공개 유지한다. 반려된 승인 listing도 운영자가 정지할 수
+  있으며 정지 상태는 기존 승인 snapshot을 숨긴다.
+- OAuth/email 로그인은 서비스 소유권을 인증하지 않는다. 제출자는 공개/표시 권리와 정확한 출처를 진술하며,
+  운영자는 사람의 검수 후 승인한다. 수정 revision은 승인 전 기본 공개 버전을 덮어쓰지 않는다.
+- `serviceUrl`·문서 URL은 HTTP(S)만 허용하고 credentials를 거부한다. 모든 redirect는 수동 추적해 각 hop의
+  scheme/hostname/DNS 주소를 재검증한다. DNS lookup 결과의 비공개/loopback/link-local/multicast/reserved 주소는
+  차단하고, 실제 TCP 연결은 검증된 주소로 pinning한다. 프로덕션 네트워크 egress도 사설 대역 차단이 필요하다.
+- 사용자 업로드 이미지/HTML/SVG는 받지 않는다. 공개 카드 이미지는 공식 서비스 화면을 health-check 후 내부 이미지
+  프록시로 제공하며 data/javascript scheme을 허용하지 않는다.
+- 신고·수정·삭제 요청은 moderator queue/audit log를 거치며 공개판에 직접 반영되지 않는다.
+
+### 13.5 만 14세 기준, 동의 및 정책
+- 일반 발견 사용자 계정과 연령 수집은 없다. Builder 가입은 만 14세 이상 자가 확인으로 제한하고, 전체 생년월일은
+  수집/영구 저장하지 않는다. 연령 부정확 신고 시 계정 잠금/검토 절차를 둔다.
+- 법정대리인 동의를 모든 builder 가입에 일괄 요구하지 않는다. 만 14세 미만 정보처리, 구체적인 저작권/공개
+  허락 또는 계약 조건에서 법정대리인 동의/권한 확인이 법적으로 필요한지 출시에 앞서 한국 법률 전문가가 검토한다.
+  필요한 경우에만 해당 정보처리/공개 작업을 잠그고 별도 동의/증적을 수집하며, 검토가 끝나지 않은 권한 부여는
+  공개하지 않는다. 이는 법적 자문이나 적합성 보증이 아니다.
+- 개인정보 처리방침/이용약관/AI·국외 처리 고지는 실제 운영자, 연락처, 목적/항목/근거, 보유기간, 삭제/권리
+  요청, 실제 처리업체/국가/이전 근거를 기반으로 게시한다. `BUILDER_PLATFORM_ENABLED=true`,
+  `LEGAL_REVIEW_APPROVED=true`, `DATABASE_URL`, `WEB_ORIGIN`, GitHub OAuth/SMTP와 `LEGAL_OPERATOR_NAME`, `LEGAL_CONTACT_EMAIL`,
+  `PRIVACY_POLICY_VERSION`, `TERMS_VERSION`, `AI_PROCESSOR_NOTICE`, `DATA_RETENTION_POLICY` 설정이 누락되면
+  가입 및 제출 데이터 처리 기능을 비활성화한다. 이 설정은 정책 문구를 생성하거나 법률 적합성을 보증하지 않는다.
+- 대화/README 외부 전송은 요청 전 고지·동의 후 목적 수행에만 사용한다. 개인정보보호법상 국외 이전과 수탁
+  관계는 실제 공급자, 지역, 재위탁/보유 조건을 확인해 처리방침과 운영 설정에 반영한다. 정확한 적용 방식은
+  국내 법률 자문 후 확정한다.
+- `npm run -w apps/api builder:preflight`는 빌드된 API의 production 설정을 오프라인 검사하며 값 대신
+  오류 필드명만 출력하고 누락/오류 시 종료 코드 1을 반환한다. `--configuration-only`는 준비용으로
+  두 승인 플래그만 검사에서 제외하며, 법률 승인/실제 외부 연결/정책 게시/DB migration 검증을 대신하지 않는다.
+  API 활성화도 동일한 설정 검사기를 사용한다. moderator 이메일, Origin/callback 형식, SMTP 포트·발신 주소·
+  인증 쌍, production의 검증된 DB TLS를 확인하며 SMTP는 인증+TLS(STARTTLS 또는 implicit TLS)를 요구한다.
+  production DB URL의 `ssl*` query parameter는 pool 검증 설정을 덮어쓸 수 있으므로 허용하지 않는다.
+  실제 운영 설정과 승인 증빙·연결 검증 순서는 `DEPLOYMENT.md`를 따른다.
+- 결과 이메일/마케팅 수신 동의는 분리하고, 소비자 이메일을 builder에 공유하지 않는다. 사용자 원문 피드백은
+  기본 비공개로 두고 소유자 화면에는 집계만 제공한다. 공개 comments와 결제/거래/예약 중개는 제외한다.
+
+### 13.6 기능/보안 테스트
+- OAuth state 재사용·만료, magic link 재사용·만료, verified email, secure cookie flags, CSRF, CORS origin,
+  rate limits, provider configuration failure, deletion/revocation을 테스트한다.
+- 서로 다른 builder가 service id를 바꿔도 초안/수정/검토/리포트에 접근할 수 없는 IDOR 회귀 테스트를 둔다.
+- 승인 전 항목은 discovery/search/ranking/assistant에서 보이지 않고, 승인된 공개 revision만 노출되는 통합 테스트를 둔다.
+- 외부 URL 검증 테스트는 public IPv4/IPv6 허용 및 loopback/private/link-local/reserved, protocol downgrade,
+  credential URL, DNS rebinding/redirect-to-private 케이스에서 network request가 차단되는지 확인한다.
+- 정책 필수 설정 누락 시 production write endpoints가 비활성화되고, AI prompt/README/token이 logs/events/DB에
+  나타나지 않음을 테스트한다.

@@ -2,6 +2,7 @@ import './styles.css';
 import { createCatalogLoader, type CatalogService as Service, type CatalogKind, type CatalogShuffle as ShuffleId, type CatalogTier as ServiceTier } from './catalog-loader.js';
 import { searchCatalogServices, type ServiceSearchKind } from './service-search.js';
 import { assistantRequest, type AssistantMessage } from './assistant-conversation.js';
+import { escapeHtml, safeExternalUrl } from './html-safety.js';
 
 type Audience = 'student' | 'teacher' | 'parent' | 'other';
 type AssistantResponse = {
@@ -28,7 +29,8 @@ const API = await resolveApiBase();
 // (see apps/api/src/image-proxy.ts) rather than a full external URL, so it
 // needs the resolved API origin prefixed before it's usable as an <img src>.
 export function resolveImageUrl(imageUrl: string): string {
-  return imageUrl.startsWith('/') ? `${API}${imageUrl}` : imageUrl;
+  if (imageUrl.startsWith('/') && !imageUrl.startsWith('//')) return `${API}${imageUrl}`;
+  return safeExternalUrl(imageUrl) ?? '';
 }
 const sessionId = crypto.randomUUID();
 // Swiping through all ~98 services in one sitting is exhausting, so cards are
@@ -277,12 +279,13 @@ function createHomeServiceCard(service: Service): HTMLElement {
   initial.setAttribute('aria-hidden', 'true');
   initial.textContent = service.name.charAt(0);
   media.append(initial);
-  if (service.imageUrl) {
+  const imageUrl = resolveImageUrl(service.imageUrl);
+  if (imageUrl) {
     const image = new Image();
     image.alt = `${service.name} 화면 미리보기`;
     image.onload = () => media.classList.remove('image-fallback');
     image.onerror = () => image.remove();
-    image.src = resolveImageUrl(service.imageUrl);
+    image.src = imageUrl;
     media.append(image);
   }
 
@@ -322,7 +325,7 @@ function createHomeServiceCard(service: Service): HTMLElement {
   footer.className = 'home-product-footer';
   const officialLink = document.createElement('a');
   officialLink.className = 'home-product-link';
-  officialLink.href = service.serviceUrl;
+  officialLink.href = safeExternalUrl(service.serviceUrl) ?? '#';
   officialLink.target = '_blank';
   officialLink.rel = 'noopener noreferrer';
   officialLink.textContent = '공식 페이지 ↗';
@@ -486,7 +489,7 @@ function appendAssistantRecommendations(recommendations: AssistantResponse['reco
     const actions = document.createElement('div');
     actions.className = 'assistant-recommendation-actions';
     const official = document.createElement('a');
-    official.href = service.serviceUrl;
+    official.href = safeExternalUrl(service.serviceUrl) ?? '#';
     official.target = '_blank';
     official.rel = 'noopener noreferrer';
     official.textContent = '공식 페이지 ↗';
@@ -515,12 +518,13 @@ function renderCard(){
   // given visitor/network. Start from a safe gradient fallback and only
   // switch to the real screenshot once it has actually finished loading, so
   // a failed/slow fetch never leaves the full-screen card looking dead/black.
-  stage.innerHTML = `<article class="service-card image-fallback"><span class="service-card-initial" aria-hidden="true">${service.name.charAt(0)}</span><span class="swipe-stamp like" aria-hidden="true">관심 있음</span><span class="swipe-stamp nope" aria-hidden="true">관심 없음</span><div class="service-copy"><div class="service-tags"><span class="kind-badge">${kindLabel(service.kind)}</span><span class="verification-badge">${verificationLabel(service)}</span>${service.tags.map(t=>`<span>${t}</span>`).join('')}</div><h3>${service.name}</h3><p>${service.tagline}</p><p class="service-reason">✨ ${recommendationReason(service)}</p><button class="preview-button" type="button" ${isGuideService(service)?'data-guide':'data-preview'}>${isGuideService(service)?'연결 가이드':'미리보기 ⤢'}</button></div></article>`;
+  stage.innerHTML = `<article class="service-card image-fallback"><span class="service-card-initial" aria-hidden="true">${escapeHtml(service.name.charAt(0))}</span><span class="swipe-stamp like" aria-hidden="true">관심 있음</span><span class="swipe-stamp nope" aria-hidden="true">관심 없음</span><div class="service-copy"><div class="service-tags"><span class="kind-badge">${escapeHtml(kindLabel(service.kind))}</span><span class="verification-badge">${escapeHtml(verificationLabel(service))}</span>${service.tags.map(t=>`<span>${escapeHtml(t)}</span>`).join('')}</div><h3>${escapeHtml(service.name)}</h3><p>${escapeHtml(service.tagline)}</p><p class="service-reason">✨ ${escapeHtml(recommendationReason(service))}</p><button class="preview-button" type="button" ${isGuideService(service)?'data-guide':'data-preview'}>${isGuideService(service)?'연결 가이드':'미리보기 ⤢'}</button></div></article>`;
   const card = stage.querySelector<HTMLElement>('.service-card')!;
-  if (service.imageUrl) {
+  const imageUrl = resolveImageUrl(service.imageUrl);
+  if (imageUrl) {
     const preload = new Image();
     preload.onload = () => {
-      card.style.backgroundImage = `url('${resolveImageUrl(service.imageUrl)}')`;
+      card.style.backgroundImage = `url(${JSON.stringify(imageUrl)})`;
       card.classList.remove('image-fallback');
       const description = document.createElement('span');
       description.className = 'sr-only';
@@ -528,7 +532,7 @@ function renderCard(){
       description.setAttribute('aria-label', `${service.name} 화면 미리보기`);
       card.append(description);
     };
-    preload.src = resolveImageUrl(service.imageUrl);
+    preload.src = imageUrl;
   }
   card.querySelector<HTMLButtonElement>('[data-preview], [data-guide]')!.onclick = (e) => { e.stopPropagation(); isGuideService(service) ? openGuide(service) : openPreview(service); };
   bindCardGestures(card);
@@ -553,7 +557,7 @@ function decide(action:'like'|'dislike'|'skip'){
 const DISLIKE_REASONS: [string, string][] = [['unclear','설명이 이해 안 됨'],['not_relevant','내 상황과 안 맞음'],['bad_design','디자인이 별로'],['already_used','이미 써봄']];
 function dislikeReasonsHtml():string{
   if(!dislikedThisBatch.length) return '';
-  const rows = dislikedThisBatch.map(s=>`<div class="dislike-reason-item" data-dislike-reason-service="${s.id}"><p class="dislike-reason-name">${s.name}</p><div class="reason-chips">${DISLIKE_REASONS.map(([value,label])=>`<button type="button" class="reason-chip" data-reason="${value}">${label}</button>`).join('')}</div><p class="dislike-reason-message" role="status"></p></div>`).join('');
+  const rows = dislikedThisBatch.map(s=>`<div class="dislike-reason-item" data-dislike-reason-service="${escapeHtml(s.id)}"><p class="dislike-reason-name">${escapeHtml(s.name)}</p><div class="reason-chips">${DISLIKE_REASONS.map(([value,label])=>`<button type="button" class="reason-chip" data-reason="${escapeHtml(value)}">${escapeHtml(label)}</button>`).join('')}</div><p class="dislike-reason-message" role="status"></p></div>`).join('');
   return `<div class="dislike-reasons"><h3>관심 없던 서비스, 이유가 있다면 알려주세요 (선택)</h3>${rows}</div>`;
 }
 function bindDislikeReasons(){
@@ -583,7 +587,7 @@ function undo(){
 // 로그인 없이 별점(1~5)+코멘트를 남길 수 있다. 전송은 기존 익명 퍼널 이벤트 경로를 재사용한다.
 function feedbackWidgetHtml(serviceId:string):string{
   const stars=[1,2,3,4,5].map(n=>`<button type="button" class="feedback-star" data-star="${n}" aria-label="${n}점">★</button>`).join('');
-  return `<div class="feedback-box" data-feedback-service="${serviceId}"><p class="feedback-label">이 서비스, 어땠나요?</p><div class="feedback-stars" role="group" aria-label="별점">${stars}</div><textarea class="feedback-comment" maxlength="300" placeholder="개선하면 좋을 점이 있다면 알려주세요 (선택)"></textarea><button type="button" class="text-button feedback-submit" disabled>피드백 보내기</button><p class="feedback-message" role="status"></p></div>`;
+  return `<div class="feedback-box" data-feedback-service="${escapeHtml(serviceId)}"><p class="feedback-label">이 서비스, 어땠나요?</p><div class="feedback-stars" role="group" aria-label="별점">${stars}</div><textarea class="feedback-comment" maxlength="300" placeholder="개선하면 좋을 점이 있다면 알려주세요 (선택)"></textarea><button type="button" class="text-button feedback-submit" disabled>피드백 보내기</button><p class="feedback-message" role="status"></p></div>`;
 }
 function bindFeedbackWidgets(){
   document.querySelectorAll<HTMLElement>('[data-feedback-service]').forEach(box=>{
@@ -625,7 +629,7 @@ function finishBatch(){
   const remaining = services.length - index;
   track('result_view',{likedCount:liked.length,remaining});
   show('results');
-  $('result-list').innerHTML=liked.length?liked.map(s=>`<article class="result-item"><div class="result-main">${s.imageUrl?`<img src="${resolveImageUrl(s.imageUrl)}" alt="">`:''}<div><h3>${s.name}</h3><p>${s.tagline}</p><p class="result-reason">✨ ${recommendationReason(s)}</p><p class="result-verification">${kindLabel(s.kind)} · ${verificationLabel(s)}</p><div class="result-links"><a href="${s.serviceUrl}" target="_blank" rel="noopener noreferrer" data-service="${s.id}">공식 페이지 열기 →</a><button class="result-preview-button" type="button" ${isGuideService(s)?`data-guide-result="${s.id}"`:`data-preview-result="${s.id}"`}>${isGuideService(s)?'연결 가이드':'미리보기'}</button></div></div></div>${feedbackWidgetHtml(s.id)}</article>`).join(''):'<p class="lede">아직 관심 표시한 서비스가 없어요. 다시 둘러보며 새로운 가능성을 찾아보세요.</p>';
+  $('result-list').innerHTML=liked.length?liked.map(s=>`<article class="result-item"><div class="result-main">${resolveImageUrl(s.imageUrl)?`<img src="${escapeHtml(resolveImageUrl(s.imageUrl))}" alt="">`:''}<div><h3>${escapeHtml(s.name)}</h3><p>${escapeHtml(s.tagline)}</p><p class="result-reason">✨ ${escapeHtml(recommendationReason(s))}</p><p class="result-verification">${escapeHtml(kindLabel(s.kind))} · ${escapeHtml(verificationLabel(s))}</p><div class="result-links"><a href="${escapeHtml(safeExternalUrl(s.serviceUrl) ?? '#')}" target="_blank" rel="noopener noreferrer" data-service="${escapeHtml(s.id)}">공식 페이지 열기 →</a><button class="result-preview-button" type="button" ${isGuideService(s)?`data-guide-result="${escapeHtml(s.id)}"`:`data-preview-result="${escapeHtml(s.id)}"`}>${isGuideService(s)?'연결 가이드':'미리보기'}</button></div></div></div>${feedbackWidgetHtml(s.id)}</article>`).join(''):'<p class="lede">아직 관심 표시한 서비스가 없어요. 다시 둘러보며 새로운 가능성을 찾아보세요.</p>';
   document.querySelectorAll<HTMLAnchorElement>('[data-service]').forEach(a=>a.onclick=()=>track('service_click',{serviceId:a.dataset.service}));
   document.querySelectorAll<HTMLButtonElement>('[data-preview-result]').forEach(b=>{
     const matched = liked.find(s=>s.id===b.dataset.previewResult);
@@ -683,18 +687,14 @@ function appendGuideList(parent: HTMLElement, label: string, values: string[]): 
   parent.append(section);
 }
 function externalLink(url: string, label: string): HTMLAnchorElement | null {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
-    const link = document.createElement('a');
-    link.href = parsed.href;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    link.textContent = label;
-    return link;
-  } catch {
-    return null;
-  }
+  const parsed = safeExternalUrl(url);
+  if (!parsed) return null;
+  const link = document.createElement('a');
+  link.href = parsed;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.textContent = label;
+  return link;
 }
 let guideGeneration = 0;
 function openGuide(service: Service): void {
@@ -832,13 +832,15 @@ function dwellBucket(ms:number):string{
   return'60s+';
 }
 function openPreview(service: Service){
+  const serviceUrl = safeExternalUrl(service.serviceUrl);
+  if (!serviceUrl) return;
   track('service_click',{serviceId:service.id,mode:'embed'});
   previewService = service;
   previewOpenedAt = Date.now();
   $('preview-title').textContent = service.name;
   $('preview-article-title').textContent = service.name;
   $('preview-article-desc').textContent = service.tagline;
-  $<HTMLAnchorElement>('preview-open-new').href = service.serviceUrl;
+  $<HTMLAnchorElement>('preview-open-new').href = serviceUrl;
   const frame = $<HTMLIFrameElement>('preview-frame');
   const fallback = $('preview-fallback');
   hideRetryIntent();
@@ -846,7 +848,7 @@ function openPreview(service: Service){
   frame.classList.remove('hidden');
   let loaded = false;
   frame.onload = () => { loaded = true; };
-  frame.src = service.serviceUrl;
+  frame.src = serviceUrl;
   window.clearTimeout(previewLoadTimer);
   previewLoadTimer = window.setTimeout(() => {
     if (!loaded) { frame.classList.add('hidden'); fallback.classList.remove('hidden'); }
@@ -911,7 +913,7 @@ async function openRanking(origin: 'landing' | 'results'){
     if (!Array.isArray(body.ranking)) throw new Error('Invalid ranking response');
     const ranking: Array<{id:string; name:string; tagline:string; serviceUrl:string; likeCount:number}> = body.ranking;
     if (ranking.length === 0) { list.innerHTML = ''; empty.classList.remove('hidden'); return; }
-    list.innerHTML = ranking.map((s, i) => `<li class="ranking-item"><span class="ranking-rank">${i + 1}</span><div class="ranking-info"><strong>${s.name}</strong><p>${s.tagline}</p></div><span class="ranking-count">${s.likeCount}회 선택</span></li>`).join('');
+    list.innerHTML = ranking.map((s, i) => `<li class="ranking-item"><span class="ranking-rank">${i + 1}</span><div class="ranking-info"><strong>${escapeHtml(s.name)}</strong><p>${escapeHtml(s.tagline)}</p></div><span class="ranking-count">${Number.isSafeInteger(s.likeCount) && s.likeCount >= 0 ? s.likeCount : 0}회 선택</span></li>`).join('');
   } catch {
     if (token !== rankingLoadToken) return;
     list.innerHTML = '';

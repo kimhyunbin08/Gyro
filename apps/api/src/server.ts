@@ -14,6 +14,7 @@ import {
 } from './assistant-recommendation.js';
 import { copilotConfiguration, isLocalAssistantRequest } from './copilot-provider.js';
 import { dedupeCatalog, healthyCatalog } from './services/discovery-catalog.js';
+import { closeBuilderDatabase, createBuilderRouter, findPublishedBuilderService, getPublishedBuilderServices } from './builder-platform.js';
 
 type EventName =
   | 'landing_view'
@@ -107,12 +108,14 @@ export function createApp() {
   app.use((_req: Request, res: Response, next: NextFunction) => {
     res.header('Access-Control-Allow-Origin', allowedOrigin());
     res.header('Vary', 'Origin');
-    res.header('Access-Control-Allow-Headers', 'Content-Type');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, X-CSRF-Token');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    if (process.env.WEB_ORIGIN) res.header('Access-Control-Allow-Credentials', 'true');
     if (_req.method === 'OPTIONS') return res.sendStatus(204);
     next();
   });
   app.use(express.json({ limit: '32kb' }));
+  app.use('/api/builder', createBuilderRouter());
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok', service: 'gyro-api', timestamp: new Date().toISOString() });
@@ -124,7 +127,11 @@ export function createApp() {
     const kindFilter = isTaskShuffle && ['product', 'service', 'skill', 'mcp'].includes(String(req.query.kind))
       ? String(req.query.kind)
       : undefined;
-    const source = dedupeCatalog(filterByTier(resolveShuffleCatalog(req.query.shuffle), req.query.tier))
+    const submittedServices = await getPublishedBuilderServices();
+    const source = filterByTier(dedupeCatalog([
+      ...resolveShuffleCatalog(req.query.shuffle),
+      ...submittedServices,
+    ]), req.query.tier)
       .filter((service) => !taskFilter || service.tasks?.includes(taskFilter))
       .filter((service) => !kindFilter || (service.kind ?? 'service') === kindFilter);
     const services = await healthyCatalog(source);
@@ -159,7 +166,10 @@ export function createApp() {
       if (configuration.local && !isLocalAssistantRequest(req.socket.remoteAddress, req.get('host'), req.get('origin'))) {
         return res.status(403).json({ message: '개인 Copilot 추천은 로컬 개발 요청만 허용합니다.' });
       }
-      const candidates = await healthyCatalog(dedupedAllShuffles);
+      const candidates = await healthyCatalog(dedupeCatalog([
+        ...dedupedAllShuffles,
+        ...await getPublishedBuilderServices(),
+      ]));
       const { result, repository } = await getAssistantRecommendation(input, candidates);
       const byId = new Map(candidates.map((service) => [service.id, service]));
       const recommendations = result.recommendations.flatMap(({ serviceId, reason }) => {
@@ -194,7 +204,7 @@ export function createApp() {
   // service's own site instead of the lazy, often-placeholder mshots image
   // the catalog entries originally pointed at.
   app.get('/api/service-image/:id', async (req, res) => {
-    const service = findServiceById(req.params.id);
+    const service = findServiceById(req.params.id) ?? await findPublishedBuilderService(req.params.id);
     if (!service) return res.status(404).end();
     const health = await checkServiceHealth(service.serviceUrl);
     if (health.status !== 'healthy') return res.status(503).json({ message: '현재 서비스에 접속할 수 없습니다.' });
@@ -210,7 +220,8 @@ export function createApp() {
   // Reason-tag, retry-intent, and dwell-bucket follow-up events carry
   // metadata.stage so they don't double-count the primary card_dislike /
   // preview-click events.
-  app.get('/api/services/funnel', (_req, res) => {
+  app.get('/api/services/funnel', async (_req, res) => {
+    const allCatalogServices = dedupeCatalog([...dedupedAllShuffles, ...await getPublishedBuilderServices()]);
     const stats = new Map<
       string,
       { likes: number; dislikes: number; skips: number; previewClicks: number; docClicks: number; connection: { success: number; partial: number; fail: number; reasons: Record<string, number> }; dislikeReasons: Record<string, number>; retryIntent: { yes: number; no: number; unsure: number }; dwellBuckets: Record<string, number> }
@@ -262,7 +273,7 @@ export function createApp() {
         }
       }
     }
-    const funnel = dedupedAllShuffles
+    const funnel = allCatalogServices
       .map((service) => {
         const s = stats.get(service.id);
         const impressions = (s?.likes || 0) + (s?.dislikes || 0) + (s?.skips || 0);
@@ -297,7 +308,8 @@ export function createApp() {
   // visitors can see which services the community has found most
   // interesting so far. Purely derived from in-memory event counts; no
   // separate persistence layer, consistent with the rest of the event store.
-  app.get('/api/services/ranking', (_req, res) => {
+  app.get('/api/services/ranking', async (_req, res) => {
+    const allCatalogServices = dedupeCatalog([...dedupedAllShuffles, ...await getPublishedBuilderServices()]);
     const likeCounts = new Map<string, number>();
     for (const event of events) {
       if (event.name !== 'card_like') continue;
@@ -305,7 +317,7 @@ export function createApp() {
       if (typeof serviceId !== 'string') continue;
       likeCounts.set(serviceId, (likeCounts.get(serviceId) || 0) + 1);
     }
-    const ranking = dedupedAllShuffles
+    const ranking = allCatalogServices
       .map((service) => ({ id: service.id, name: service.name, tagline: service.tagline, serviceUrl: resolveServiceUrl(service.serviceUrl), likeCount: likeCounts.get(service.id) || 0 }))
       .filter((entry) => entry.likeCount > 0)
       .sort((a, b) => b.likeCount - a.likeCount)
@@ -352,7 +364,10 @@ if (process.env.NODE_ENV !== 'test') {
   const host = process.env.GYRO_ASSISTANT_PROVIDER === 'copilot-local' ? '127.0.0.1' : '0.0.0.0';
   const server = createApp().listen(port, host, () => console.log(`Gyro API listening on ${host}:${port}`));
   const stopMonitor = startCatalogHealthMonitor(allShuffleServices().map((service) => service.serviceUrl));
-  server.on('close', stopMonitor);
+  server.on('close', () => {
+    stopMonitor();
+    void closeBuilderDatabase().catch(() => console.error('Builder database pool shutdown failed.'));
+  });
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.once(signal, () => {
       stopMonitor();
