@@ -5,6 +5,7 @@ import { Pool, type PoolClient } from 'pg';
 import { z } from 'zod';
 import type { CatalogService } from './catalog.js';
 import { isTaskId } from './catalogs/task.js';
+import { builderReadiness } from './builder-readiness.js';
 
 const SESSION_COOKIE = 'gyro_builder_session';
 const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -117,15 +118,7 @@ function emailConfiguration() {
 }
 
 function platformEnabled(): boolean {
-  if (
-    process.env.BUILDER_PLATFORM_ENABLED !== 'true' ||
-    process.env.LEGAL_REVIEW_APPROVED !== 'true' ||
-    !process.env.DATABASE_URL ||
-    !process.env.WEB_ORIGIN ||
-    !legalConfiguration().ready
-  ) return false;
-  if (process.env.NODE_ENV === 'production' && !process.env.WEB_ORIGIN.startsWith('https://')) return false;
-  return githubConfiguration() && emailConfiguration();
+  return builderReadiness(process.env).length === 0;
 }
 
 function normalizeHttpUrl(value: string): string | undefined {
@@ -211,6 +204,7 @@ function createTransport() {
     host: process.env.SMTP_HOST,
     port,
     secure: port === 465,
+    requireTLS: process.env.NODE_ENV === 'production',
     ...(process.env.SMTP_USER && process.env.SMTP_PASSWORD
       ? { auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD } }
       : {}),

@@ -690,6 +690,13 @@ type CatalogService = {                             // 기존 필드에 아래 o
 - 대화/README 외부 전송은 요청 전 고지·동의 후 목적 수행에만 사용한다. 개인정보보호법상 국외 이전과 수탁
   관계는 실제 공급자, 지역, 재위탁/보유 조건을 확인해 처리방침과 운영 설정에 반영한다. 정확한 적용 방식은
   국내 법률 자문 후 확정한다.
+- `npm run -w apps/api builder:preflight`는 빌드된 API의 production 설정을 오프라인 검사하며 값 대신
+  오류 필드명만 출력하고 누락/오류 시 종료 코드 1을 반환한다. `--configuration-only`는 준비용으로
+  두 승인 플래그만 검사에서 제외하며, 법률 승인/실제 외부 연결/정책 게시/DB migration 검증을 대신하지 않는다.
+  API 활성화도 동일한 설정 검사기를 사용한다. moderator 이메일, Origin/callback 형식, SMTP 포트·발신 주소·
+  인증 쌍, production의 검증된 DB TLS를 확인하며 SMTP는 인증+TLS(STARTTLS 또는 implicit TLS)를 요구한다.
+  production DB URL의 `ssl*` query parameter는 pool 검증 설정을 덮어쓸 수 있으므로 허용하지 않는다.
+  실제 운영 설정과 승인 증빙·연결 검증 순서는 `DEPLOYMENT.md`를 따른다.
 - 결과 이메일/마케팅 수신 동의는 분리하고, 소비자 이메일을 builder에 공유하지 않는다. 사용자 원문 피드백은
   기본 비공개로 두고 소유자 화면에는 집계만 제공한다. 공개 comments와 결제/거래/예약 중개는 제외한다.
 
