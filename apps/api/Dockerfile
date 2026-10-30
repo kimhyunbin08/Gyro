@@ -13,6 +13,7 @@ RUN npm ci --legacy-peer-deps
 
 # Copy source
 COPY apps/api/src apps/api/src
+COPY apps/api/migrations apps/api/migrations
 COPY apps/api/tsconfig.json apps/api/
 
 # Build
@@ -32,6 +33,7 @@ COPY --from=builder /app/apps/api/package*.json ./
 
 # Copy built app
 COPY --from=builder /app/apps/api/dist ./dist
+COPY --from=builder /app/apps/api/migrations ./migrations
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
