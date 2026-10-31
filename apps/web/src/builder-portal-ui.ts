@@ -79,9 +79,10 @@ export function initializeBuilderPortal(apiBase: string): void {
       const canManageServices = builder.status === 'approved' && builder.programVerified;
       document.getElementById('builder-approved-tools')?.classList.toggle('hidden', !canManageServices);
       if (canManageServices) await Promise.all([loadDashboard(), loadOwnedServices()]);
-    } catch {
+    } catch (error) {
       login.classList.remove('hidden');
       panel.classList.add('hidden');
+      statusText('builder-login-status', messageFrom(error));
     }
   };
 

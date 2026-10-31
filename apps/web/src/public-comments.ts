@@ -16,12 +16,15 @@ export function initializePublicComments(apiBase: string): (serviceId: string) =
   const load = async (serviceId: string): Promise<void> => {
     currentServiceId = serviceId;
     const requestId = ++generation;
+    form.hidden = true;
+    status.textContent = '';
     list.replaceChildren(node('p', '댓글을 불러오고 있어요.'));
     try {
       const response = await fetch(`${apiBase}/api/services/${encodeURIComponent(serviceId)}/comments`);
       const payload = await response.json() as { comments?: PublicComment[]; message?: string };
       if (!response.ok) throw new Error(payload.message || '댓글을 불러오지 못했어요.');
       if (requestId !== generation) return;
+      form.hidden = false;
       const comments = payload.comments ?? [];
       list.replaceChildren();
       if (comments.length === 0) list.append(node('p', '아직 댓글이 없습니다. 첫 댓글을 남겨보세요.'));

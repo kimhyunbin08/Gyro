@@ -608,8 +608,10 @@ type CatalogService = {                             // 기존 필드에 아래 o
 ## 13. 빌더 포털·서비스 제출·공개 댓글 기술 설계 (`prd.md` §9-9)
 
 ### 13.1 저장소와 상태
-- `apps/api/src/builder-portal.ts`는 PostgreSQL 저장소 어댑터와 테이블 초기화를 제공한다. `DATABASE_URL`이
-  없으면 기존 공개 발견 API는 동작하지만 빌더·댓글 API는 `503`으로 기능 비활성 상태를 명시한다.
+- `apps/api/src/builder-portal.ts`는 PostgreSQL 저장소 어댑터와 테이블 초기화를 제공한다.
+  `GYRO_BUILDER_PORTAL_ENABLED=true`를 운영자가 명시한 경우에만 저장소와 빌더·댓글 API를 활성화한다.
+  기본 비활성 상태에서는 DB 연결·스키마 초기화를 하지 않고 빌더·댓글·관리자 API는 `503`을 반환하며,
+  기존 발견 API는 계속 동작한다. DB 설정만으로 공개 댓글을 활성화하지 않는다.
 - Gyro의 대상 카탈로그는 바이브벤처 프로그램에서 제작된 서비스로 한정한다. 현재 정적 카탈로그 전체는
   제품 담당자 결정에 따라 적격으로 간주한다. 탐색 셔플은 출처 범위를 넓히지 않는 분류이며 검색·랭킹·
   퍼널·댓글·AI 추천도 동일한 프로그램 제작 서비스만 사용한다. 신규 빌더 계정은 운영자가 프로그램 참가
@@ -642,10 +644,13 @@ type CatalogService = {                             // 기존 필드에 아래 o
 | `/api/admin/builders/:id` | 참가 확인값을 포함한 빌더 승인 또는 확인 취소·계정 정지 | `X-Admin-Token` |
 | `/api/admin/*` | 소유권/제출 승인·반려, 신고 댓글 숨김/복구/영구 삭제 | `X-Admin-Token` |
 
-- `DATABASE_URL`이 설정된 경우 API 시작 시 스키마를 초기화한다. 매직링크는 15분·1회 사용, 세션은
+- 공개 설정이 켜진 경우 DB·정확한 웹 Origin·관리자 토큰·메일 발신 설정을 시작 시 검증하고,
+  설정 누락 시 시작을 실패시킨다. 검증 후 스키마를 초기화한다. 매직링크는 15분·1회 사용, 세션은
   7일 만료다. 세션 쿠키는 HttpOnly이며, 프로덕션에서 Secure/SameSite=None을 사용한다. 빌더 변경
   요청은 `WEB_ORIGIN`과 정확히 일치하는 Origin만 허용한다. 관리자 인증은 `BUILDER_ADMIN_TOKEN`과
   constant-time 비교를 사용하고 브라우저 `sessionStorage`/`localStorage`에 토큰을 저장하지 않는다.
+  매직링크는 정적 호스팅에서 직접 열 수 있는 웹 루트의 `/#token=...` 형식을 사용하며, 웹앱이
+  토큰을 확인하면 빌더 화면으로 전환한다. 서버 라우팅이 없는 `/builder` 경로는 사용하지 않는다.
 - 이메일은 `AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING`과 `AZURE_COMMUNICATION_EMAIL_SENDER`로
   Azure Communication Services Email에서 발송한다. 설정이 없거나 발송이 실패하면 성공 응답으로 숨기지 않는다.
 - 댓글은 기본 익명, 선택 닉네임, 이메일 미수집이다. 텍스트는 브라우저에서 HTML로 해석하지 않고
@@ -662,6 +667,9 @@ type CatalogService = {                             // 기존 필드에 아래 o
 - 현재 Bicep이 PostgreSQL/메일 리소스를 프로비저닝하지 않는다. 운영 배포 전 private networking/
   firewall을 포함한 PostgreSQL 리소스 준비, Container App secret 설정, 검증된 발신 주소, 고유한
   관리자 토큰, 개인정보 처리방침·이용약관·미성년자·댓글 신고/삭제 절차를 운영자가 마련해야 한다.
+  이 조건이 충족되기 전에는 `GYRO_BUILDER_PORTAL_ENABLED`를 켜지 않는다.
+  테마 서비스의 승인된 수정은 원래 해당 항목이 속한 셔플에만 반영하고, 신규 제출만 기본/작업 셔플에
+  추가한다. 수정·신규 항목에도 동일한 `tier` 필터를 적용한다.
 - 테스트는 매직링크 1회 사용·Origin 검사·대기 제출의 비노출·운영자 승인 후 노출·권한 없는 수정 거부·
   댓글 익명 게시·신고·숨김·관리자 인증을 검증한다. PostgreSQL 통합 테스트는 별도 임시 데이터베이스를
   사용하며 실제 이메일은 발송하지 않는다.

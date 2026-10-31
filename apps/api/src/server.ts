@@ -169,7 +169,8 @@ function isCatalogService(serviceId: string): boolean {
 }
 
 export function createApp(options: AppOptions = {}) {
-  const builderStore = options.builderStore ?? null;
+  const portalEnabled = process.env.GYRO_BUILDER_PORTAL_ENABLED === 'true';
+  const builderStore = portalEnabled ? options.builderStore ?? null : null;
   const sendMagicLink = options.sendMagicLink ?? sendBuilderMagicLink;
   const events: Array<{ name: EventName; sessionId: string; metadata: Record<string, unknown>; createdAt: string }> = [];
   const emailLeads = new Set<string>();
@@ -192,6 +193,10 @@ export function createApp(options: AppOptions = {}) {
     next();
   });
   app.use(express.json({ limit: '32kb' }));
+  app.use(['/api/builder', '/api/admin', /^\/api\/services\/[^/]+\/comments(?:\/|$)/], (_req, res, next) => {
+    if (!portalEnabled) return res.status(503).json({ message: '빌더 포털과 댓글은 공개 준비 중이에요.' });
+    next();
+  });
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok', service: 'gyro-api', timestamp: new Date().toISOString() });
@@ -255,7 +260,7 @@ export function createApp(options: AppOptions = {}) {
     const { token, tokenHash } = createMagicToken();
     try {
       await builderStore.issueMagicLink(email, tokenHash, new Date(Date.now() + 15 * 60 * 1000));
-      const link = new URL('/builder', webOrigin);
+      const link = new URL('/', webOrigin);
       link.hash = new URLSearchParams({ token }).toString();
       await sendMagicLink(email, link.toString());
       res.status(202).json({ accepted: true, message: '로그인 링크를 요청한 이메일로 보냈습니다.' });
@@ -442,6 +447,7 @@ export function createApp(options: AppOptions = {}) {
 
   app.post('/api/services/:id/comments', async (req, res) => {
     if (!builderStore) return res.status(503).json({ message: '댓글 저장소가 아직 설정되지 않았어요.' });
+    if (!process.env.BUILDER_ADMIN_TOKEN) return res.status(503).json({ message: '댓글 운영자 설정이 필요합니다.' });
     const services = await publishedCatalog();
     if (!services.some((service) => service.id === req.params.id)) return res.status(404).json({ message: '서비스를 찾을 수 없습니다.' });
     const parsed = publicCommentSchema.safeParse(req.body);
@@ -474,13 +480,13 @@ export function createApp(options: AppOptions = {}) {
       ? String(req.query.kind)
       : undefined;
     const shuffleServices = resolveShuffleCatalog(req.query.shuffle);
-    const base = filterByTier(shuffleServices, req.query.tier);
     const builderServices = builderStore ? await builderStore.listServices() : [];
-    const includesNewServices = !req.query.shuffle || req.query.shuffle === 'vibe-venture' || req.query.shuffle === 'task';
-    const source = dedupeCatalog(mergeCatalog(
-      base,
-      builderServices.filter((service) => includesNewServices || base.some(({ id }) => id === service.id)),
-    ))
+    const includesNewServices = shuffleServices === resolveShuffleCatalog(undefined) || req.query.shuffle === 'task';
+    const source = dedupeCatalog(filterByTier(mergeCatalog(
+      shuffleServices,
+      builderServices.filter((service) => shuffleServices.some(({ id }) => id === service.id)
+        || (includesNewServices && !isCatalogService(service.id))),
+    ), req.query.tier))
       .filter((service) => !taskFilter || service.tasks?.includes(taskFilter))
       .filter((service) => !kindFilter || (service.kind ?? 'service') === kindFilter);
     const services = await healthyCatalog(source);
@@ -706,11 +712,23 @@ export function createApp(options: AppOptions = {}) {
 
 if (process.env.NODE_ENV !== 'test') {
   const start = async () => {
-    const builderStore = process.env.DATABASE_URL
+    const portalEnabled = process.env.GYRO_BUILDER_PORTAL_ENABLED === 'true';
+    if (portalEnabled) {
+      for (const name of ['DATABASE_URL', 'WEB_ORIGIN', 'BUILDER_ADMIN_TOKEN',
+        'AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING', 'AZURE_COMMUNICATION_EMAIL_SENDER']) {
+        if (!process.env[name]) throw new Error(`Builder portal requires ${name}.`);
+      }
+      const origin = new URL(process.env.WEB_ORIGIN!);
+      if (origin.origin !== process.env.WEB_ORIGIN
+        || (process.env.NODE_ENV === 'production' && origin.protocol !== 'https:')) {
+        throw new Error('Builder portal requires an exact web origin with HTTPS in production.');
+      }
+    }
+    const builderStore = portalEnabled && process.env.DATABASE_URL
       ? createPostgresBuilderStore(process.env.DATABASE_URL)
       : null;
     if (builderStore) await builderStore.initialize();
-    else console.warn('Builder portal is disabled: DATABASE_URL is not configured.');
+    else console.warn('Builder portal and comments are disabled: launch approval is required.');
     const port = Number(process.env.PORT || 3001);
     const host = process.env.GYRO_ASSISTANT_PROVIDER === 'copilot-local' ? '127.0.0.1' : '0.0.0.0';
     const server = createApp({ builderStore }).listen(port, host, () => console.log(`Gyro API listening on ${host}:${port}`));
