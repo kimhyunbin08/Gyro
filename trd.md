@@ -18,24 +18,27 @@
 6. 홈 대화형 서비스 발견과 GitHub Copilot SDK 연동(`prd.md` §9-8 승격, 상세 §12). 추천 후보는 수동 검수된
    카탈로그에서만 선택하고, 공개 GitHub 정보 분석은 공개 API의 저장소 설명·언어·README로 제한한다.
 7. 출처·라이선스·확인일·요금 확인 상태를 기록하는 상한 없는 수동 검수 카탈로그.
+8. 빌더 이메일 매직링크 인증, 운영자 승인형 서비스 소유권·등록·수정, 소유 서비스 성과 대시보드,
+   공개 익명 댓글·신고·운영자 숨김(`prd.md` §9-9).
 
 ### 2.2 Out of Scope (Deferred)
-1. 로그인/회원가입, 사용자 계정/프로필 영속화.
-2. 실제 이메일 발송 파이프라인(SMTP/ESP 연동, 반송 처리, 원클릭 수신거부).
+1. 발견 사용자 계정/프로필 영속화 및 사용자 로그인.
+2. 결과 저장/뉴스레터 등 마케팅 이메일 발송과 반송·수신거부 처리.
 3. 발견자 계정·대화·프로필·AI 요청의 영속 저장.
 4. 비공개 GitHub 저장소 접근, 임의 웹사이트 수집, 카탈로그 후보 자동 공개, AI에 의한 카탈로그 수정.
 
-> Phase 2("검증 루프") 설계 초안 중 §14.3(계정 불필요 항목)은 구현되어 §2.1 #4로 승격되었다.
-> §14.4(빌더 계정 필요 항목)의 기술 설계는 §10에 별도로 정리되어 있으며, 아직 구현되지 않았다.
-> §10이 실제 반영되기 전까지는 위 Out of Scope 항목이 그대로 유효하다.
+> Phase 2 §14.3의 계정 불필요 항목은 구현되어 §2.1 #4로 승격되었다. 빌더 포털·댓글은 `prd.md` §9-9와
+> 본 문서 §13으로 승격되었다. 실제 외부 배포에는 PostgreSQL, Azure Communication Services Email,
+> `WEB_ORIGIN`, `BUILDER_ADMIN_TOKEN` 운영 설정이 필요하다.
 
 ## 3. 기술 스택
 1. **Frontend**: TypeScript + Vite, 순수 DOM 조작(프레임워크 없음), `fetch`로 API 호출.
 2. **Backend API**: Node.js + Express 5 + Zod(입력 검증) + TypeScript(ESM).
-3. **Data/Storage**: 현재는 검수된 정적 카탈로그 TypeScript 데이터 + 인메모리 이벤트/이메일 저장소.
-   항목 수 상한은 없으며, catalog source adapter로 분리 가능한 모듈 경계를 유지한다. 대화/추천 로그는
-   저장하지 않는다. 별도 데이터베이스는 아직 없다.
-4. **배포**: Azure Container Apps 2개(web/api), ACR 원격 빌드(`azd up`). `DEPLOYMENT.md` 참고.
+3. **Data/Storage**: 검수된 정적 TypeScript 카탈로그, 기존 인메모리 이메일 리드/퍼널 이벤트와
+   `DATABASE_URL`로 연결하는 PostgreSQL. DB에는 빌더 계정·세션 해시·소유권·검수 제출·공개 댓글 및
+   발견자 개인 단위 이벤트가 아닌 서비스별 집계만 저장한다. 대화/추천 로그는 저장하지 않는다.
+4. **배포**: Azure Container Apps 2개(web/api), ACR 원격 빌드(`azd up`). 빌더 포털은 별도
+   PostgreSQL과 Azure Communication Services Email 설정이 없으면 비활성화된다. `DEPLOYMENT.md` 참고.
 
 ## 4. 아키텍처 개요
 
@@ -43,8 +46,11 @@
 flowchart LR
   U["사용자 브라우저"] -->|GET /config.json| W["apps/web (Vite static)"]
   U -->|카탈로그·퍼널 API\nPOST /api/assistant/chat| A["apps/api (Express)"]
+  U -->|빌더 매직링크·댓글| A
   A -->|HEAD/GET 헬스체크| S["학생 제작 서비스 URL들\n(외부, Azure 등)"]
   A -->|정적 import| C["apps/api/src/catalog.ts"]
+  A -->|TLS| DB["PostgreSQL\n빌더·제출·댓글·집계"]
+  A -->|Email SDK| MAIL["Azure Communication Services Email"]
   A -->|JSON-RPC server-side only| SDK["Copilot SDK isolated runtime"]
   SDK -->|HTTPS| COPILOT["GitHub Copilot"]
   A -->|public API only| GH["GitHub public API"]
@@ -53,9 +59,9 @@ flowchart LR
 - 웹 번들에는 API 베이스 URL을 하드코딩하지 않는다. 컨테이너 엔트리포인트가 런타임에
   `apps/web/public/config.json`을 기록하고, `app.ts`는 top-level await로 이를 먼저 읽은 뒤
   나머지 로직을 실행한다(`resolveApiBase`).
-- API는 상태를 거의 갖지 않는다: 카탈로그는 검수된 코드 데이터이며, 헬스체크 결과만 URL별로 TTL
-  캐시된다. AI 대화 내용과 공개 README는 영구 저장하지 않는다. SDK는 요청별 임시 디렉터리에서 실행하며
-  요청 종료 시 해당 디렉터리를 제거한다.
+- 기존 발견 퍼널·이메일 리드는 프로세스 메모리에 남는다. 빌더 자원은 PostgreSQL에 저장되며 매직링크와
+  로그인 세션은 해시만 보관한다. AI 대화 내용과 공개 README는 영구 저장하지 않는다. SDK는 요청별 임시
+  디렉터리에서 실행하며 요청 종료 시 해당 디렉터리를 제거한다.
 
 ## 5. 기능 요구사항 (기술 관점)
 
@@ -207,9 +213,10 @@ flowchart LR
    10분 간격으로 캐시를 강제 갱신한다. 최대 5개 worker, 회차 중첩 금지, 요청당 4초 제한
    (HEAD→GET 전체 포함), 응답 본문 취소로 불필요한 다운로드를 막는다. 서버 종료/종료 시그널에서
    타이머를 해제한다. 실패·URL 이동 결과와 점검 자체의 예외는 서버 로그에 기록한다.
-6. 정상 응답의 `Response.url`을 `resolvedUrl`로 저장하며 HTTP(S)/자격증명 없는 URL만 반영한다.
-   실패 시 원본 URL을 유지하고 `httpStatus` 또는 `error`를 기록한다. 매 회차 원본 URL부터
-   다시 확인하므로 이전 이동 주소에 고착되지 않는다. 리다이렉트는 fetch의 기본 추적 제한을 따른다.
+6. 리다이렉트는 수동 추적하고 매 이동마다 HTTP(S)·자격증명 부재·공인 IP 주소를 재검증한다.
+   사설/예약/로컬 주소는 거부하며, DNS 결과를 연결에 고정해 검증 이후 DNS 재바인딩을 차단한다.
+   HTTPS에서 HTTP로의 강등과 5회를 넘는 이동도 거부한다. 성공한 최종 URL을 `resolvedUrl`로 기록하고
+   실패 시 원본 URL을 유지하며 `httpStatus` 또는 `error`를 남긴다. 매 회차 원본부터 다시 확인한다.
 7. `/api/services`는 `resolvedUrl`을 `serviceUrl`로 반환하고 최종 URL 기준으로도 중복 제거한다.
    결과·미리보기는 이 링크를 그대로 사용한다. 랭킹은 최신 정상 캐시의 링크를 사용하되 기존의
    역대 집계 정책을 유지한다. 이미지 프록시는 헬스체크 후 최종 URL로 스크린샷을 요청하고,
@@ -320,12 +327,12 @@ type FunnelEntry = {
 | 메서드/경로 | 설명 | 검증 | 응답 |
 | --- | --- | --- | --- |
 | `GET /health` | 컨테이너 헬스체크 | - | `{ status: 'ok', service, timestamp }` |
-| `GET /api/services` | 헬스체크 통과 + 중복 제거된 카탈로그 | `?shuffle=vibe-venture\|sns\|dating\|productivity\|game\|task`(선택, 기본/미인식 값은 `vibe-venture`); task 셔플에서 선택적 `task`/`kind` 필터 | `{ services: Service[] }` |
-| `GET /api/services/ranking` | 누적 `card_like` 횟수 기준 상위 `RANKING_LIMIT`(20)개 서비스 랭킹 | - | `{ ranking: RankingEntry[] }` |
-| `GET /api/services/funnel` | 서비스별 노출/관심 있음/관심 없음/건너뛰기/미리보기·문서 클릭/이유 태그/재체험 의향/체류시간/연결 결과 집계 | - | `{ funnel: FunnelEntry[] }` |
+| `GET /api/services` | 바이브벤처 프로그램 제작 서비스 중 헬스체크 통과 + 중복 제거된 카탈로그 | `?shuffle=vibe-venture\|sns\|dating\|productivity\|game\|task`(선택, 기본/미인식 값은 `vibe-venture`); task 셔플에서 선택적 `task`/`kind` 필터 | `{ services: Service[] }` |
+| `GET /api/services/ranking` | 바이브벤처 프로그램 제작 서비스만 대상으로 누적 `card_like` 횟수 기준 상위 `RANKING_LIMIT`(20)개 랭킹 | - | `{ ranking: RankingEntry[] }` |
+| `GET /api/services/funnel` | 바이브벤처 프로그램 제작 서비스별 노출/관심 있음/관심 없음/건너뛰기/미리보기·문서 클릭/이유 태그/재체험 의향/체류시간/연결 결과 집계 | - | `{ funnel: FunnelEntry[] }` |
 | `POST /api/events` | 퍼널 이벤트 적재 | Zod(`eventSchema`) | `202 { accepted: true }` / `400` |
 | `POST /api/email-leads` | 이메일 리드 저장 | Zod(`emailSchema`) | `201` / `409` 중복 / `400` |
-| `POST /api/assistant/chat` | 다중 턴 대화 기반 카탈로그 추천 | 메시지 role/content, techStack, 공개 GitHub URL Zod 검증 | `{ reply, recommendations, analyzedRepository? }` / `400` 입력·저장소 오류 / `413` 요청 크기 / `429` 요청 한도 / `502` AI 오류 / `503` 환경 설정 누락 |
+| `POST /api/assistant/chat` | 다중 턴 대화 기반 바이브벤처 프로그램 제작 서비스 추천 | 메시지 role/content, techStack, 공개 GitHub URL Zod 검증 | `{ reply, recommendations, analyzedRepository? }` / `400` 입력·저장소 오류 / `413` 요청 크기 / `429` 요청 한도 / `502` AI 오류 / `503` 환경 설정 누락 |
 
 CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 시 `*`. Copilot 호출은 아래 서버 환경
 변수(`GYRO_ASSISTANT_PROVIDER`, `COPILOT_MODEL`, 배포 시 `COPILOT_GITHUB_TOKEN`)를 사용하며
@@ -353,12 +360,11 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
    배포 시 `COPILOT_GITHUB_TOKEN`을 사용한다. 설정 미완료는 `503`, 모델 오류는
    `502`로 반환하며 대체 성공 응답을 만들지 않는다.
 
-## 10. Phase 2 — "검증 루프" 기술 설계 초안 (§10.1 구현 완료, §10.2 이후 미구현)
+## 10. Phase 2 — "검증 루프" 구현 기록 및 잔여 설계
 
-> `prd.md` §14의 요구사항 초안에 대응하는 기술 설계 초안이다. §10.1(§14.3, 계정 불필요)은
-> **구현 완료**되어 §2.1/§5.1/§5.2/§6.3/§6.6/§7로 승격되었다(이 하위 섹션은 구현 기록으로 유지).
-> §10.2(§14.4, 빌더 계정 필요) 이후는 여전히 **미구현**이다. 착수 시 해당 설계를 §2~§7로 승격하고
-> 이 섹션은 제거(또는 "완료"로 표시)한다.
+> `prd.md` §14의 기존 설계 초안에 대응한다. §10.1(§14.3, 계정 불필요)은 구현 완료되어
+> §2.1/§5.1/§5.2/§6.3/§6.6/§7로 승격되었다. 빌더 포털·댓글은 §13으로 승격·구현되었으므로,
+> §10.2는 현재 동작 명세가 아니라 미승격 잔여 아이디어의 기록으로만 본다.
 
 ### 10.1 §14.3 (계정 불필요) — API 스키마 변경 없이 수용 가능 — ✅ 구현 완료
 - `card_dislike` 이벤트의 `metadata`에 `reason?: string` 필드를 추가한다. `eventSchema`의
@@ -377,11 +383,10 @@ CORS: `WEB_ORIGIN` 환경변수로 허용 오리진을 설정하며, 미설정 �
   재집계하는 읽기 전용 엔드포인트 `GET /api/services/funnel`로 구현했다 — 새 저장소 없이 기존
   인메모리 이벤트 스토어만 재사용한다(§5.2 #5, §6.6).
 
-### 10.2 §14.4 (빌더 계정 필요) — 아키텍처 전제 변경 필요
-- **인증**: 빌더 인증 방식은 미확정(매직링크 이메일 / GitHub OAuth / 바이브벤처 기관 발급 코드 등
-  `ideation.md` §8 오픈 퀘스천 참고). 어떤 방식이든 발견 사용자 플로우(`landing/profile/cards/
-  results/ranking`)와는 완전히 분리된 신규 라우트(`/builder/*`)로 설계해 기존 무로그인 플로우에
-  영향을 주지 않는다.
+### 10.2 §14.4 잔여 아이디어 — 현행 요구사항은 §13 참조
+- 현행 빌더 인증은 §13에 정의된 이메일 매직링크다. 신규 빌더는 운영자가 바이브벤처 프로그램 참가를
+  명시적으로 확인·기록하고 승인해야 하며, API도 확인된 승인 계정에만 쓰기 권한을 부여한다.
+- 아래 데이터 모델·저장소 메모는 구현 전 초안이며 현행 스키마/API 계약으로 사용하지 않는다.
 - **영속화 전제 변경**: 현재 "DB 없음, 인메모리 전용"(§2.2/§6.4) 전제가 깨진다. 최소한 다음 엔티티는
   프로세스 재시작에도 살아남는 저장소(SQLite/Postgres 등)가 필요하다 — 빌더 계정, 서비스별 버전
   이력, (선택) A/B 카드 변형. 이벤트/랭킹 집계는 당분간 인메모리로 유지해도 되지만, 빌더 대시보드가
@@ -591,12 +596,72 @@ type CatalogService = {                             // 기존 필드에 아래 o
 - 후보 발굴은 공식 API·허용된 공개 피드·공식 사이트/문서·공개 저장소/디렉터리에서 수행한다.
   Product Hunt, LinkedIn, X, Threads는 접근이 허용된 경로만 사용하고, ToS 위반 크롤링이나 자동 게시를
   하지 않는다.
-- 정적 데이터와 인메모리 이벤트 구조는 초기 운영용이다. 대규모 수집/검색, 관리자 검수 큐, 장기
-  영속화로 넘어가기 전에는 별도 ADR에서 카탈로그 DB 및 Azure AI Search 도입 여부·비용·운영 권한을
-  확정한다. 현재 구현은 외부 저장소·AI Search 자원을 자동으로 만들지 않는다.
+- 정적 데이터와 인메모리 발견 이벤트 구조는 초기 운영용이다. 빌더 제출·승인·댓글 데이터는 PostgreSQL에
+  저장하고 서비스별 집계만 영속화한다. 전체 카탈로그 DB 및 Azure AI Search는 별도 검토 대상으로 남긴다.
 
 ### 12.4 테스트
 - API: 요청 스키마/한도, Copilot 설정 누락·오류, 응답 ID allowlist, 공개 GitHub URL 검증/메타데이터 전달,
   README 크기 제한, 비공개·외부 도메인 거부, 건강하지 않은 추천 제외를 mock fetch로 확인한다.
 - Web: 동의 전 전송 금지, 사용자/AI 다중 턴 표시, 카탈로그 추천 카드, 요금 미확인 표시, 오류 표시와
   새 대화 초기화, 긴 한국어 응답을 포함한 UTF-8 요청 크기, 실패 입력 복원과 실패 턴 중복 방지를 검증한다.
+
+## 13. 빌더 포털·서비스 제출·공개 댓글 기술 설계 (`prd.md` §9-9)
+
+### 13.1 저장소와 상태
+- `apps/api/src/builder-portal.ts`는 PostgreSQL 저장소 어댑터와 테이블 초기화를 제공한다. `DATABASE_URL`이
+  없으면 기존 공개 발견 API는 동작하지만 빌더·댓글 API는 `503`으로 기능 비활성 상태를 명시한다.
+- Gyro의 대상 카탈로그는 바이브벤처 프로그램에서 제작된 서비스로 한정한다. 현재 정적 카탈로그 전체는
+  제품 담당자 결정에 따라 적격으로 간주한다. 탐색 셔플은 출처 범위를 넓히지 않는 분류이며 검색·랭킹·
+  퍼널·댓글·AI 추천도 동일한 프로그램 제작 서비스만 사용한다. 신규 빌더 계정은 운영자가 프로그램 참가
+  여부를 확인한 뒤 승인하고, 신규 서비스는 승인된 계정에서 제출되어 별도 운영자 승인을 거쳐 공개된다.
+- 테이블은 빌더 이메일/상태/바이브벤처 참가 확인 여부, 1회용 매직링크 해시, 세션 해시, 서비스별 소유권,
+  제출 대기열, 공개 댓글/신고 수, 서비스 지표, 관리자 변경 감사 로그를 저장한다. 참가 확인은 운영자의
+  명시적 승인 요청으로만 설정되며, 참가 확인 취소는 계정 정지와 함께 기록한다. 매직링크 원문·세션 원문·
+  발견자 세션 ID 및 자유 코멘트 이벤트는 이 DB에 저장하지 않는다.
+- 사용자 퍼널에서 관심·반응·별점이 오면 식별자와 텍스트 없이 서비스 단위 카운터·별점 합/건수만 DB에
+  반영한다. 기존 퍼널 API의 구체 이벤트 배열은 여전히 프로세스 메모리에만 존재한다.
+- 신규 서비스/수정 제안은 제출 큐에만 생성된다. 운영자가 승인하면 공개 카탈로그 오버레이에 적용되고,
+  공개 서비스 API·헬스체크·검색·랭킹·퍼널·AI 후보에 반영된다. 대기 중/반려된 서비스는 노출되지 않는다.
+- 빌더가 기존 카탈로그 항목의 수정 권한을 얻으려면 공개 서비스 ID와 공개적으로 확인 가능한 근거를
+  제출하고, 운영자가 계정과 소유권을 각각 승인해야 한다. 코드 카탈로그는 원본으로 남고 승인된 변경은
+  PostgreSQL 오버레이로 적용한다. 사용자 제공 이미지 URL은 받지 않으며 기존 서비스 화면 이미지 프록시를
+  계속 사용한다.
+
+### 13.2 API 계약
+| 메서드/경로 | 동작 | 접근 |
+| --- | --- | --- |
+| `POST /api/builder/auth/request` | 이메일 매직링크 발송 요청 | 공개, Origin 및 IP/이메일 제한 |
+| `POST /api/builder/auth/verify` | 만료·일회용 토큰 검증, HttpOnly 세션 쿠키 발급 | 공개, 지정 Origin |
+| `GET /api/builder/me`, `POST /api/builder/auth/logout` | 세션 확인/폐기 | 빌더 세션 |
+| `POST /api/builder/services/ownership-requests` | 정적 카탈로그 서비스 소유권 확인 요청 | 인증 빌더 |
+| `POST /api/builder/services` | 신규 서비스 제출 | 승인된 빌더 |
+| `POST /api/builder/services/:id/proposals` | 소유 서비스 수정안 제출 | 승인된 소유 빌더 |
+| `GET /api/builder/services`, `GET /api/builder/dashboard` | 소유 서비스와 집계 지표 조회 | 승인된 빌더 |
+| `GET /api/services/:id/comments`, `POST /api/services/:id/comments` | 공개 댓글 조회/즉시 게시 | 공개 |
+| `POST /api/services/:id/comments/:commentId/report` | 공개 댓글 신고 | 공개, IP 제한 |
+| `/api/admin/builders/:id` | 참가 확인값을 포함한 빌더 승인 또는 확인 취소·계정 정지 | `X-Admin-Token` |
+| `/api/admin/*` | 소유권/제출 승인·반려, 신고 댓글 숨김/복구/영구 삭제 | `X-Admin-Token` |
+
+- `DATABASE_URL`이 설정된 경우 API 시작 시 스키마를 초기화한다. 매직링크는 15분·1회 사용, 세션은
+  7일 만료다. 세션 쿠키는 HttpOnly이며, 프로덕션에서 Secure/SameSite=None을 사용한다. 빌더 변경
+  요청은 `WEB_ORIGIN`과 정확히 일치하는 Origin만 허용한다. 관리자 인증은 `BUILDER_ADMIN_TOKEN`과
+  constant-time 비교를 사용하고 브라우저 `sessionStorage`/`localStorage`에 토큰을 저장하지 않는다.
+- 이메일은 `AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING`과 `AZURE_COMMUNICATION_EMAIL_SENDER`로
+  Azure Communication Services Email에서 발송한다. 설정이 없거나 발송이 실패하면 성공 응답으로 숨기지 않는다.
+- 댓글은 기본 익명, 선택 닉네임, 이메일 미수집이다. 텍스트는 브라우저에서 HTML로 해석하지 않고
+  `textContent`로 표시한다. 댓글은 즉시 공개되고 IP별 게시 1시간 5회/신고 1시간 20회 제한을 둔다.
+  신고 댓글 숨김·복구·영구 삭제, 계정/소유권/제출 변경에는 감사 로그를 기록한다. 영구 삭제는 되돌릴 수
+  없으므로 운영자 화면에서 별도 확인을 거친다.
+- 서비스 등록은 이름·소개·공식 HTTPS 링크·태그를 받는다. 카탈로그 출처/권리/요금/검증 배지는 기존
+  운영자 검수 원칙을 따르며 빌더가 직접 검증 수준을 올리지 못한다.
+- 빌더 API는 세션의 계정 상태와 참가 확인값을 함께 확인한다. `approved`와 `programVerified: true`가
+  모두 유효해야 제출·수정·대시보드 기능을 사용할 수 있으며, 승인 API는 확인값이 누락되거나 거짓이면
+  거부한다.
+
+### 13.3 공개 배포 전제 및 테스트
+- 현재 Bicep이 PostgreSQL/메일 리소스를 프로비저닝하지 않는다. 운영 배포 전 private networking/
+  firewall을 포함한 PostgreSQL 리소스 준비, Container App secret 설정, 검증된 발신 주소, 고유한
+  관리자 토큰, 개인정보 처리방침·이용약관·미성년자·댓글 신고/삭제 절차를 운영자가 마련해야 한다.
+- 테스트는 매직링크 1회 사용·Origin 검사·대기 제출의 비노출·운영자 승인 후 노출·권한 없는 수정 거부·
+  댓글 익명 게시·신고·숨김·관리자 인증을 검증한다. PostgreSQL 통합 테스트는 별도 임시 데이터베이스를
+  사용하며 실제 이메일은 발송하지 않는다.

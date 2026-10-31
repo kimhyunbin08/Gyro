@@ -22,6 +22,7 @@
           <button type="button" class="nav-link" id="theme-entry-button" data-primary-nav>주제별 탐색</button>
           <button type="button" class="nav-link" id="task-entry-button" data-primary-nav>작업으로 찾기</button>
           <button type="button" class="nav-link" id="ranking-nav" data-primary-nav>인기 서비스</button>
+          <button type="button" class="nav-link" id="builder-nav">빌더</button>
         </nav>
         <div class="theme-settings-wrap">
           <button type="button" class="nav-link settings-button" id="theme-settings-button" aria-expanded="false" aria-controls="theme-settings">설정 <span aria-hidden="true">⌄</span></button>
@@ -179,6 +180,61 @@
         </div>
       </section>
 
+      <section class="shell hidden" id="builder" aria-labelledby="builder-title">
+        <nav class="topbar"><a class="brand-lockup" href="/" id="builder-home"><strong class="wordmark">gyro<span>.</span></strong></a><span class="pill">빌더 포털</span><button type="button" class="text-button" id="builder-admin-open">운영자 관리</button></nav>
+        <div class="narrow">
+          <p class="eyebrow">서비스 제작자 공간</p>
+          <h2 id="builder-title">내 서비스를<br /><em>소개하고 개선해요.</em></h2>
+          <p class="lede">바이브벤처 프로그램 참가자가 만든 서비스만 등록·수정할 수 있습니다. 프로그램 참여 확인과 운영자 검수를 거쳐 공개됩니다.</p>
+          <form id="builder-login-form" class="builder-panel">
+            <label for="builder-email">빌더 이메일</label>
+            <input id="builder-email" type="email" autocomplete="email" required maxlength="254" />
+            <button class="button button-dark full" type="submit">로그인 링크 받기</button>
+            <p class="form-message" id="builder-login-status" role="status"></p>
+          </form>
+          <div id="builder-account-panel" class="builder-panel hidden">
+            <p id="builder-account-status" role="status"></p>
+            <button type="button" class="text-button" id="builder-logout">로그아웃</button>
+            <div id="builder-approved-tools" class="hidden">
+              <h3>기존 서비스 소유권 요청</h3>
+              <form id="builder-ownership-form">
+                <label for="builder-service-id">카탈로그 서비스 ID</label><input id="builder-service-id" required maxlength="120" />
+                <label for="builder-ownership-evidence">공개적으로 확인 가능한 소유권 근거 URL</label><input id="builder-ownership-evidence" type="url" required maxlength="500" />
+                <button class="button button-outline" type="submit">소유권 확인 요청</button>
+              </form>
+              <h3>새 서비스 등록 / 수정 제안</h3>
+              <form id="builder-service-form">
+                <label for="builder-edit-id">수정할 서비스 ID <small>(새 서비스면 비워두기)</small></label><input id="builder-edit-id" maxlength="120" />
+                <label for="builder-service-name">서비스 이름</label><input id="builder-service-name" required maxlength="80" />
+                <label for="builder-service-tagline">한 줄 소개</label><input id="builder-service-tagline" required minlength="8" maxlength="160" />
+                <label for="builder-service-description">설명</label><textarea id="builder-service-description" required minlength="20" maxlength="2000"></textarea>
+                <label for="builder-service-url">공식 HTTPS 링크</label><input id="builder-service-url" type="url" required />
+                <label for="builder-service-tags">태그 (쉼표로 구분)</label><input id="builder-service-tags" required maxlength="400" />
+                <button class="button button-dark full" type="submit">검수 요청 제출</button>
+              </form>
+              <p class="form-message" id="builder-service-status" role="status"></p>
+              <h3>서비스 성과</h3><div id="builder-dashboard" class="builder-dashboard"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="shell hidden" id="builder-admin" aria-labelledby="builder-admin-title">
+        <nav class="topbar"><button type="button" class="text-button" id="builder-admin-back">← 빌더 포털</button><span class="pill">운영자 관리</span></nav>
+        <div class="narrow">
+          <h2 id="builder-admin-title">검수와<br /><em>신고 관리</em></h2>
+          <form id="builder-admin-auth" class="builder-panel">
+            <label for="builder-admin-token">운영자 토큰 (화면에만 임시 보관)</label><input id="builder-admin-token" type="password" autocomplete="off" required />
+            <button class="button button-dark" type="submit">대기열 불러오기</button>
+          </form>
+          <p class="form-message" id="builder-admin-status" role="status"></p>
+          <section><h3>빌더 승인</h3><div id="builder-admin-builders"></div></section>
+          <section><h3>서비스 소유권 요청</h3><div id="builder-admin-ownership"></div></section>
+          <section><h3>서비스 등록·수정 제안</h3><div id="builder-admin-submissions"></div></section>
+          <section><h3>신고된 공개 댓글</h3><div id="builder-admin-comments"></div></section>
+        </div>
+      </section>
+
       <!-- Embedded service preview: an article-style modal (prd.md §9-3 /
            ideation.md §9) showing name → one-line description → the
            embedded iframe, in that order, inside a still-scrollable dialog.
@@ -198,6 +254,18 @@
             <iframe class="preview-frame" id="preview-frame" title="서비스 미리보기"></iframe>
             <p class="preview-fallback hidden" id="preview-fallback">이 서비스는 미리보기를 지원하지 않아요. 새 탭에서 열어보세요.</p>
           </div>
+          <section class="public-comments" aria-labelledby="public-comments-title">
+            <h3 id="public-comments-title">공개 댓글</h3>
+            <p class="comment-disclosure">댓글은 바로 공개됩니다. 이름·학교·연락처 등 개인정보나 비방·불법 콘텐츠를 쓰지 마세요. 신고된 댓글은 운영자가 숨길 수 있습니다.</p>
+            <div id="public-comment-list" aria-live="polite"></div>
+            <form id="public-comment-form">
+              <label for="public-comment-nickname">닉네임 (선택)</label><input id="public-comment-nickname" maxlength="30" />
+              <label for="public-comment-body">댓글</label><textarea id="public-comment-body" required minlength="2" maxlength="2000"></textarea>
+              <label class="check"><input id="public-comment-privacy-check" type="checkbox" required /> 개인정보나 연락처를 포함하지 않았고, 이 댓글이 공개됨을 확인했어요.</label>
+              <button class="button button-dark" type="submit">댓글 공개하기</button>
+              <p class="form-message" id="public-comment-status" role="status"></p>
+            </form>
+          </section>
         </div>
         <div class="guide-overlay hidden" id="guide-overlay" role="dialog" aria-modal="true" aria-labelledby="guide-title">
           <div class="guide-panel">

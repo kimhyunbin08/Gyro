@@ -161,6 +161,7 @@ describe('POST /api/assistant/chat', () => {
   });
 
   it('enforces role-specific message limits and preserves CORS on oversized JSON errors', async () => {
+    vi.stubEnv('WEB_ORIGIN', '*');
     const isolated = createApp();
     for (const [role, size] of [['user', 1501], ['assistant', 2501]] as const) {
       expect((await request(isolated).post('/api/assistant/chat').send({

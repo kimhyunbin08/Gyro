@@ -2,6 +2,96 @@
 @import './themes/clay.css';
 @import './themes/midnight.css';
 
+.builder-panel,
+.builder-dashboard,
+.public-comments {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  color: var(--foreground);
+}
+
+.builder-panel label,
+.public-comments label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.builder-panel input,
+.builder-panel textarea,
+.public-comments input,
+.public-comments textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.builder-panel textarea,
+.public-comments textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.builder-panel h3,
+.builder-admin section h3,
+.public-comments h3 {
+  margin: 22px 0 4px;
+}
+
+.builder-dashboard {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.builder-review-item,
+.public-comment {
+  margin: 10px 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+}
+
+.builder-review-item h4,
+.builder-review-item p,
+.public-comment p {
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+
+.builder-review-item button {
+  margin: 6px 8px 0 0;
+}
+
+.public-comment-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.public-comment-header strong {
+  color: var(--foreground);
+}
+
+.comment-disclosure {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
 :root {
   --app-header-height: 80px;
   --font-geist-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
