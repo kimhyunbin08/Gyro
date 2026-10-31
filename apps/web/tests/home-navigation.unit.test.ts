@@ -1,8 +1,5 @@
 // @vitest-environment jsdom
-// Regression coverage for the "홈으로 돌아가기" navigation: the logo and a
-// dedicated home button on every non-landing screen must let the user
-// manually jump back to the landing screen (and reset round state) from
-// anywhere in the flow — this must never happen automatically.
+// The shared header returns to platform home, not the marketing landing.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -51,9 +48,11 @@ describe('web unit: home navigation', () => {
   beforeEach(() => {
     mountApp();
     vi.restoreAllMocks();
+    window.history.replaceState(null, '', '/');
+    Object.defineProperty(window, 'scrollTo', { configurable: true, value: vi.fn() });
   });
 
-  it('returns to landing (and resets round state) from the cards screen via the logo', async () => {
+  it('returns to platform home and resets round state via the single shared logo', async () => {
     stubServiceFetch();
     await loadAppModule();
     await flush();
@@ -71,11 +70,12 @@ describe('web unit: home navigation', () => {
     (document.getElementById('like-button') as HTMLButtonElement).click();
     await waitForFlyOut();
 
-    const logo = document.querySelector<HTMLElement>('#cards .home-logo');
+    const logo = document.getElementById('brand-home');
     expect(logo).not.toBeNull();
     logo!.click();
 
-    expect(isHidden('landing')).toBe(false);
+    expect(isHidden('home')).toBe(false);
+    expect(isHidden('landing')).toBe(true);
     expect(isHidden('cards')).toBe(true);
 
     // Re-entering the cards screen must start the round over, confirming
@@ -88,7 +88,7 @@ describe('web unit: home navigation', () => {
     expect(document.getElementById('progress')!.textContent).toBe('1 / 2');
   });
 
-  it('returns to landing from the results screen via the dedicated home button', async () => {
+  it('returns to platform home from results via the shared home tab', async () => {
     stubServiceFetch();
     await loadAppModule();
     await flush();
@@ -105,11 +105,11 @@ describe('web unit: home navigation', () => {
     await waitForFlyOut();
     expect(isHidden('results')).toBe(false);
 
-    const homeButton = document.querySelector<HTMLButtonElement>('#results .home-button');
+    const homeButton = document.getElementById('discover-nav');
     expect(homeButton).not.toBeNull();
     homeButton!.click();
 
-    expect(isHidden('landing')).toBe(false);
+    expect(isHidden('home')).toBe(false);
     expect(isHidden('results')).toBe(true);
   });
 

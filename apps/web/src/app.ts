@@ -56,7 +56,7 @@ export function matchScore(service: Service, audience: Audience | null, interest
   const taskMatch = taskId !== undefined && taskId !== null && service.tasks?.includes(taskId);
   return (matchedTags + (taskMatch ? 1 : 0)) * INTEREST_WEIGHT + (audienceMatch ? AUDIENCE_WEIGHT : 0);
 }
-let services: Service[] = [], index = 0, batchStart = 0, batchEnd = 0, liked: Service[] = [], history: Array<{service:Service; action:'like'|'dislike'|'skip'}> = [];
+let services: Service[] = [], index = 0, batchStart = 0, batchEnd = 0, liked: Service[] = [], history: Array<{service:Service; action:'like'|'dislike'|'skip'; previousFeedService?: Service}> = [];
 // prd.md §14.3 / trd.md §10.1 (Phase 2 draft): services disliked in the
 // current round, collected so the "why not interested" question can be
 // asked once, batched, at the results screen instead of interrupting the
@@ -93,8 +93,12 @@ const catalogLoader = createCatalogLoader(API);
 const loadPublicComments = initializePublicComments(API);
 type AppearanceTheme = 'paper' | 'clay' | 'midnight';
 const APPEARANCE_THEMES: AppearanceTheme[] = ['paper', 'clay', 'midnight'];
-const DEFAULT_APPEARANCE_THEME: AppearanceTheme = 'midnight';
+const DEFAULT_APPEARANCE_THEME: AppearanceTheme = 'paper';
 const APPEARANCE_THEME_STORAGE_KEY = 'gyro.appearance-theme';
+let platformTheme: AppearanceTheme = DEFAULT_APPEARANCE_THEME;
+let landingAudience: 'user' | 'builder' = 'user';
+let activeScreen = 'landing';
+const feedServices = new Map<string, Service>();
 let homeCatalogServices: Service[] = [];
 let homeCatalogState: 'loading' | 'ready' | 'error' = 'loading';
 let selectedHomeKind: ServiceSearchKind = 'all';
@@ -106,17 +110,15 @@ let profileCatalogReady = false;
 let profileCatalogError = false;
 let profileLoadToken = 0;
 const $ = <T extends HTMLElement>(id:string) => document.getElementById(id) as T;
-const screens = ['landing','theme','tier','task-discovery','profile','cards','results','ranking','builder','builder-admin'];
+const screens = ['landing','home','discovery','settings','theme','tier','task-discovery','profile','cards','results','ranking','builder','builder-admin'];
+const mainRoutes: Record<string, string> = { landing: 'landing', home: 'home', feed: 'builder', discover: 'discovery', settings: 'settings' };
+function routeForScreen(screen: string): string {
+  if (screen === 'builder' || screen === 'builder-admin') return 'feed';
+  if (screen === 'landing' || screen === 'home' || screen === 'settings') return screen;
+  return 'discover';
+}
 function syncPrimaryNav(screen: string): void {
-  const activeId = screen === 'ranking'
-    ? 'ranking-nav'
-    : screen === 'theme' || screen === 'tier'
-      ? 'theme-entry-button'
-      : screen === 'task-discovery' || currentShuffle === 'task'
-        ? 'task-entry-button'
-        : ['sns', 'dating', 'productivity', 'game'].includes(currentShuffle)
-          ? 'theme-entry-button'
-          : 'discover-nav';
+  const activeId = ({ home: 'discover-nav', feed: 'builder-nav', discover: 'catalog-nav', settings: 'theme-settings-button' })[routeForScreen(screen)];
   document.querySelectorAll<HTMLButtonElement>('[data-primary-nav]').forEach(button => {
     const active = button.id === activeId;
     button.classList.toggle('nav-link-active', active);
@@ -124,15 +126,39 @@ function syncPrimaryNav(screen: string): void {
     else button.removeAttribute('aria-current');
   });
 }
-function show(id:string){
+function show(id: string, updateHistory = true, focus = true){
   if (id !== 'cards') cancelCardInteraction();
+  closePreview();
+  closeGuide();
+  activeScreen = id;
   screens.forEach(x => $(x).classList.toggle('hidden', x !== id));
+  const isLanding = id === 'landing';
+  document.documentElement.dataset.surface = isLanding ? 'landing' : 'platform';
+  $('platform-nav').classList.toggle('hidden', isLanding);
+  $('landing-audience').classList.toggle('hidden', !isLanding);
+  document.querySelectorAll<HTMLElement>('.landing-enter').forEach(button => button.classList.toggle('hidden', !isLanding));
+  $('brand-context').textContent = isLanding ? '발견이 시작되는 곳' : '내가 필요한 서비스 찾기';
+  applyAppearanceTheme(isLanding ? (landingAudience === 'builder' ? 'midnight' : 'paper') : platformTheme);
+  if (id === 'builder') renderFeed();
   syncPrimaryNav(id);
+  const hash = `#${routeForScreen(id)}`;
+  if (updateHistory && location.hash !== hash) {
+    if (location.hash.startsWith('#token=')) window.history.replaceState(null, '', hash);
+    else window.history.pushState(null, '', hash);
+  }
+  if (focus) {
+    const heading = $(id).querySelector<HTMLElement>('h1, h2');
+    heading?.setAttribute('tabindex', '-1');
+    heading?.focus({ preventScroll: true });
+  }
   window.scrollTo({top:0,behavior:'smooth'});
 }
 window.addEventListener('gyro:navigate', (event) => {
   const screen = (event as CustomEvent<string>).detail;
-  if (screen === 'builder' || screen === 'builder-admin') show(screen);
+  if (screen === 'builder' || screen === 'builder-admin') {
+    resetDiscovery();
+    show(screen);
+  }
 });
 function track(name:string, metadata:Record<string,unknown>={}){void fetch(`${API}/api/events`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,sessionId,metadata})}).catch(()=>{});}
 function startBatch(){ batchStart = index; batchEnd = Math.min(index + BATCH_SIZE, services.length); dislikedThisBatch = []; history = []; }
@@ -273,7 +299,7 @@ function verificationLabel(service: Service): string {
 function isGuideService(service: Service): boolean {
   return service.kind === 'skill' || service.kind === 'mcp';
 }
-function createHomeServiceCard(service: Service): HTMLElement {
+function createHomeServiceCard(service: Service, includeDescription = false): HTMLElement {
   const article = document.createElement('article');
   article.className = 'home-product-card';
 
@@ -324,6 +350,12 @@ function createHomeServiceCard(service: Service): HTMLElement {
   verification.className = 'home-product-verification';
   verification.textContent = verificationLabel(service);
   copy.append(labels, title, tagline, verification);
+  if (includeDescription) {
+    const description = document.createElement('p');
+    description.className = 'feed-description';
+    description.textContent = service.description || service.tagline;
+    copy.append(description);
+  }
 
   const footer = document.createElement('div');
   footer.className = 'home-product-footer';
@@ -383,7 +415,7 @@ function renderHomeCatalog(): void {
   status.textContent = query || selectedHomeKind !== 'all'
     ? `${matches.length}개 서비스`
     : `${homeCatalogServices.length}개 중 ${items.length}개 표시`;
-  list.append(...items.map(createHomeServiceCard));
+  list.append(...items.map(service => createHomeServiceCard(service)));
   if (items.length < matches.length) {
     const more = document.createElement('button');
     more.type = 'button';
@@ -394,6 +426,33 @@ function renderHomeCatalog(): void {
       renderHomeCatalog();
     };
     list.append(more);
+  }
+}
+function renderFeed(): void {
+  const list = $('feed-service-list');
+  list.replaceChildren();
+  if (feedServices.size === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'home-empty';
+    empty.textContent = '아직 관심 표시한 서비스가 없어요. 발견에서 카드 셔플을 시작하고 마음에 드는 서비스에 관심을 표시해보세요.';
+    list.append(empty);
+    return;
+  }
+  for (const service of feedServices.values()) {
+    const card = createHomeServiceCard(service, true);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'text-button feed-remove';
+    remove.textContent = '관심 목록에서 빼기';
+    remove.setAttribute('aria-label', `${service.name} 관심 목록에서 빼기`);
+    remove.onclick = () => {
+      feedServices.delete(service.id);
+      renderFeed();
+      $('feed-picks-title').setAttribute('tabindex', '-1');
+      $('feed-picks-title').focus();
+    };
+    card.append(remove);
+    list.append(card);
   }
 }
 function loadHomeCatalog(): Promise<void> {
@@ -545,8 +604,11 @@ function renderCard(){
 function decide(action:'like'|'dislike'|'skip'){
   if (!canDecide()) return;
   const service = services[index++];
-  history = [{ service, action }];
-  if (action === 'like') liked.push(service);
+  history = [{ service, action, previousFeedService: feedServices.get(service.id) }];
+  if (action === 'like') {
+    liked.push(service);
+    feedServices.set(service.id, service);
+  }
   if (action === 'dislike') dislikedThisBatch.push(service);
   track(action === 'like' ? 'card_like' : action === 'dislike' ? 'card_dislike' : 'card_skip', { serviceId: service.id });
   renderCard();
@@ -581,7 +643,11 @@ function undo(){
   const last = history.pop();
   if (!last) return;
   index--;
-  if (last.action === 'like') liked = liked.filter(service => service.id !== last.service.id);
+  if (last.action === 'like') {
+    liked = liked.filter(service => service.id !== last.service.id);
+    if (last.previousFeedService) feedServices.set(last.service.id, last.previousFeedService);
+    else feedServices.delete(last.service.id);
+  }
   if (last.action === 'dislike') dislikedThisBatch = dislikedThisBatch.filter(service => service.id !== last.service.id);
   track('card_undo', { serviceId: last.service.id });
   renderCard();
@@ -898,9 +964,9 @@ function closePreview(){
 }
 // Ranking: aggregated server-side from anonymous 'card_like' (right-swipe)
 // events, so it reflects everyone's choices, not just this session's.
-let rankingOrigin: 'landing' | 'results' = 'landing';
+let rankingOrigin: 'discovery' | 'results' = 'discovery';
 let rankingLoadToken = 0;
-async function openRanking(origin: 'landing' | 'results'){
+async function openRanking(origin: 'discovery' | 'results'){
   const token = ++rankingLoadToken;
   profileLoadToken++;
   taskLoadToken++;
@@ -951,19 +1017,14 @@ function applyAppearanceTheme(theme: AppearanceTheme, persist = false): void {
   }
 }
 function restoreAppearanceTheme(): void {
-  applyAppearanceTheme(DEFAULT_APPEARANCE_THEME);
   try {
     const storage = globalThis.localStorage;
     if (typeof storage?.getItem !== 'function') return;
     const saved = storage.getItem(APPEARANCE_THEME_STORAGE_KEY);
-    if (isAppearanceTheme(saved)) applyAppearanceTheme(saved);
+    if (isAppearanceTheme(saved)) platformTheme = saved;
   } catch (error) {
     console.error('저장된 화면 테마를 읽지 못했습니다.', error);
   }
-}
-function closeThemeSettings(): void {
-  $('theme-settings').classList.add('hidden');
-  $<HTMLButtonElement>('theme-settings-button').setAttribute('aria-expanded', 'false');
 }
 const startButton = $<HTMLButtonElement>('start-button');
 const startButtonDefaultText = startButton.textContent ?? '';
@@ -1081,13 +1142,10 @@ taskEntryButton.onclick = () => {
   $('task-status').textContent = '';
   show('task-discovery');
 };
-// Shared "go back to the very start" action: the logo and home button on
-// every non-landing screen, plus the results screen's "처음부터 다시 보기"
-// button, all reset in-progress round state and return to landing. This is
-// always a manual, user-triggered navigation (never automatic).
 function resetDiscovery(): void {
   profileLoadToken++;
   taskLoadToken++;
+  rankingLoadToken++;
   cancelCardInteraction();
   closePreview();
   closeGuide();
@@ -1097,15 +1155,11 @@ function resetDiscovery(): void {
   currentShuffle = 'vibe-venture';
   pendingThemeShuffle = null;
 }
-function goHome(){ resetDiscovery(); show('landing'); }
-$('theme-back').onclick = goHome;
-$('task-back').onclick = goHome;
+function navigateMain(screen: string): void { resetDiscovery(); show(screen); }
+function goHome(){ navigateMain('home'); }
+$('theme-back').onclick = () => navigateMain('discovery');
+$('task-back').onclick = () => navigateMain('discovery');
 $('tier-back').onclick = () => { renderThemeChoices(); show('theme'); };
-document.querySelectorAll<HTMLElement>('.home-logo').forEach(el=>{
-  el.addEventListener('click', goHome);
-  el.addEventListener('keydown', e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();goHome();}});
-});
-document.querySelectorAll<HTMLButtonElement>('.home-button').forEach(el=>el.onclick=goHome);
 $('profile-next').onclick=()=>{if(!profileCatalogReady||services.length===0)return;services=[...services].sort((a,b)=>matchScore(b,audience,interests)-matchScore(a,audience,interests));track('profile_submit',{audience,interests:[...interests],shuffle:currentShuffle});startBatch();show('cards');renderCard();};
 function triggerDecision(action:'like'|'dislike'){
   if (!canDecide()) return;
@@ -1118,20 +1172,24 @@ $('continue-button').onclick=()=>{startBatch();show('cards');renderCard();};
 $('restart-button').onclick=goHome;
 $('email-form').onsubmit=async e=>{e.preventDefault();const message=$('email-message');try{const r=await fetch(`${API}/api/email-leads`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$<HTMLInputElement>('email').value,updatesOptIn:$<HTMLInputElement>('updates').checked})});const body=await r.json();if(!r.ok)throw new Error(body.message);message.textContent='결과를 저장했어요.';track('email_submit',{updatesOptIn:$<HTMLInputElement>('updates').checked});}catch(error){message.textContent=error instanceof Error?error.message:'저장에 실패했어요.';}};
 $('preview-close').onclick=requestClosePreview;
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('theme-settings').classList.contains('hidden'))closeThemeSettings();else if(!$('guide-overlay').classList.contains('hidden'))closeGuide();else requestClosePreview();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('guide-overlay').classList.contains('hidden'))closeGuide();else requestClosePreview();}});
 $('guide-close').onclick=closeGuide;
 $('guide-skip').onclick=closeGuide;
 document.querySelectorAll<HTMLButtonElement>('[data-retry-intent]').forEach(b=>b.onclick=()=>answerRetryIntent(b.dataset.retryIntent as 'yes'|'no'|'unsure'));
 $('retry-intent-skip').onclick=closePreview;
 $('ranking-link-results').onclick=()=>openRanking('results');
-$('ranking-nav').onclick=()=>openRanking('landing');
+$('ranking-nav').onclick=()=>openRanking('discovery');
 $('ranking-back').onclick=closeRanking;
-$('home-ranking-entry').onclick=()=>openRanking('landing');
+$('home-ranking-entry').onclick=()=>openRanking('discovery');
 $('discover-nav').onclick=()=>{
-  if($('landing').classList.contains('hidden'))goHome();
+  goHome();
   $<HTMLTextAreaElement>('assistant-message').focus();
 };
-$('brand-home').onclick=event=>{event.preventDefault();goHome();};
+$('brand-home').onclick=event=>{event.preventDefault();if(activeScreen==='landing')return;goHome();};
+document.querySelector<HTMLAnchorElement>('.skip-link')!.onclick=event=>{
+  event.preventDefault();
+  $('main-content').focus();
+};
 $('home-search-form').onsubmit=(event)=>{event.preventDefault();renderHomeCatalog();};
 $('assistant-form').addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -1146,7 +1204,7 @@ $('assistant-form').addEventListener('submit', async (event) => {
   }
 
   const userMessage: AssistantMessage = { role: 'user', content };
-  $('landing').classList.add('has-assistant-conversation');
+  $('home').classList.add('has-assistant-conversation');
   const messageElement = appendAssistantMessage('user', content);
   messageInput.value = '';
   assistantRequestPending = true;
@@ -1194,7 +1252,7 @@ $('assistant-form').addEventListener('submit', async (event) => {
     if (!completed) {
       messageElement.remove();
       if (!messageInput.value) messageInput.value = content;
-      $('landing').classList.toggle('has-assistant-conversation', assistantMessages.length > 0);
+      $('home').classList.toggle('has-assistant-conversation', assistantMessages.length > 0);
     }
   }
 });
@@ -1202,7 +1260,7 @@ $('assistant-reset').addEventListener('click', () => {
   if (assistantRequestPending) return;
   assistantMessages.length = 0;
   $('assistant-thread').replaceChildren();
-  $('landing').classList.remove('has-assistant-conversation');
+  $('home').classList.remove('has-assistant-conversation');
   $<HTMLTextAreaElement>('assistant-message').value = '';
   $<HTMLInputElement>('assistant-tech-stack').value = '';
   $<HTMLInputElement>('assistant-repo-url').value = '';
@@ -1233,21 +1291,127 @@ document.querySelectorAll<HTMLButtonElement>('[data-home-kind]').forEach(button=
   });
   renderHomeCatalog();
 });
-const themeSettingsButton=$<HTMLButtonElement>('theme-settings-button');
-themeSettingsButton.onclick=()=>{
-  const settings=$('theme-settings');
-  const willOpen=settings.classList.contains('hidden');
-  settings.classList.toggle('hidden',!willOpen);
-  themeSettingsButton.setAttribute('aria-expanded',String(willOpen));
-};
+$('theme-settings-button').onclick=()=>navigateMain('settings');
+$('catalog-nav').onclick=()=>navigateMain('discovery');
+$('builder-nav').onclick=()=>navigateMain('builder');
+$('settings-feed').onclick=()=>navigateMain('builder');
+$('back-to-landing').onclick=()=>navigateMain('landing');
+document.querySelectorAll<HTMLButtonElement>('[data-open-discovery]').forEach(button=>{
+  button.onclick=()=>navigateMain('discovery');
+});
+document.querySelectorAll<HTMLButtonElement>('[data-open-feed]').forEach(button=>{
+  button.onclick=()=>navigateMain('builder');
+});
+document.querySelectorAll<HTMLButtonElement>('[data-enter-service]').forEach(button=>{
+  button.onclick=()=> {
+    platformTheme = landingAudience === 'builder' ? 'midnight' : 'paper';
+    restoreAppearanceTheme();
+    goHome();
+  };
+});
 document.querySelectorAll<HTMLButtonElement>('[data-app-theme]').forEach(button=>button.onclick=()=>{
   const theme=button.dataset.appTheme;
-  if(theme==='paper'||theme==='clay'||theme==='midnight')applyAppearanceTheme(theme,true);
+  if(theme && isAppearanceTheme(theme)) {
+    platformTheme=theme;
+    applyAppearanceTheme(platformTheme,true);
+  }
 });
-document.addEventListener('click',event=>{
-  const wrapper=$('theme-settings').parentElement!;
-  if(event.target instanceof Node&&!wrapper.contains(event.target))closeThemeSettings();
+const landingCopy = {
+  user: {
+    kicker: 'FOR THE CURIOUS · 발견하는 사람들',
+    title: '필요했던 서비스,', emphasis: '뜻밖의 발견.',
+    description: '찾는 데 쓰던 시간을, 좋아하는 일에. 나의 문제에서 시작해 새로운 서비스를 만나보세요.',
+    note: '로그인 없이, 가볍게 시작해요.',
+    previewTitle: '“이런 도구, 어디 없을까?”',
+    previewDescription: '해결하고 싶은 일을 말하면, 검수된 서비스 안에서 함께 찾아요.',
+    tags: ['문제에서 시작', '대화로 발견', '직접 써보기'],
+    caption: '당신의 다음 도구를 만나는 곳',
+    steps: [
+      ['문제를 꺼내세요.', '반복되는 일, 막힌 순간. 어떤 도구가 필요한지 몰라도 괜찮아요.'],
+      ['새로운 가능성을 만나요.', '검색하거나, 카드 한 장씩. 나만의 속도로 서비스를 둘러보세요.'],
+      ['직접 연결해보세요.', '공식 링크와 연결 가이드를 확인하고, 내 일에 맞는지 경험해보세요.'],
+    ],
+  },
+  builder: {
+    kicker: 'FOR THE MAKERS · 만드는 사람들',
+    title: '당신이 만든 가능성,', emphasis: '누군가의 다음 도구.',
+    description: '만드는 데서 끝나지 않도록. 바이브벤처에서 만든 서비스를 소개하고, 진짜 반응에서 다음 개선을 찾아보세요.',
+    note: '둘러보기는 누구나. 등록은 빌더 인증 후에.',
+    previewTitle: '만든 다음이, 진짜 시작이니까.',
+    previewDescription: '서비스를 소개하고, 발견되는 순간을 만나세요. 관심과 피드백을 다음 개선으로 연결해요.',
+    tags: ['서비스 소개', '반응 확인', '다음 개선'],
+    caption: '만드는 사람도, 발견하는 사람도',
+    steps: [
+      ['만든 것을 소개하세요.', '서비스 링크와 설명을 준비하세요. 참가 확인과 운영자 검수를 거쳐 공개돼요.'],
+      ['발견되는 순간을 만나요.', '검색, 대화, 카드 셔플. 필요한 사람에게 닿는 여러 접점을 만들어요.'],
+      ['반응에서 다음을 찾으세요.', '내 피드에서 서비스 성과와 공개 댓글을 확인하고 다음 개선을 준비해요.'],
+    ],
+  },
+};
+document.querySelectorAll<HTMLButtonElement>('[data-landing-audience]').forEach(button=>{
+  button.onclick=()=>{
+    const next=button.dataset.landingAudience;
+    if(next!=='user'&&next!=='builder')return;
+    landingAudience=next;
+    const copy=landingCopy[next];
+    $('landing-kicker').textContent=copy.kicker;
+    const emphasis=document.createElement('em');
+    emphasis.textContent=copy.emphasis;
+    $('landing-title').replaceChildren(document.createTextNode(copy.title),document.createElement('br'),emphasis);
+    $('landing-description').textContent=copy.description;
+    $('landing-entry-note').textContent=copy.note;
+    $('landing-preview-title').textContent=copy.previewTitle;
+    $('landing-preview-description').textContent=copy.previewDescription;
+    $('landing-preview-caption').textContent=copy.caption;
+    $('landing-preview-tags').replaceChildren(...copy.tags.map(text=>{
+      const tag=document.createElement('span');tag.textContent=text;return tag;
+    }));
+    ['one','two','three'].forEach((step,index)=>{
+      $(`landing-step-${step}`).textContent=copy.steps[index][0];
+      $(`landing-step-${step}-copy`).textContent=copy.steps[index][1];
+    });
+    document.querySelectorAll<HTMLButtonElement>('[data-landing-audience]').forEach(option=>{
+      option.setAttribute('aria-pressed',String(option===button));
+    });
+    if(activeScreen==='landing')applyAppearanceTheme(next==='builder'?'midnight':'paper');
+  };
+});
+window.addEventListener('hashchange',()=>{
+  if(location.hash.startsWith('#token='))return;
+  const screen=mainRoutes[location.hash.slice(1)] ?? 'landing';
+  resetDiscovery();
+  show(screen,false);
 });
 restoreAppearanceTheme();
-initializeBuilderPortal(API);
+const initialScreen = mainRoutes[location.hash.slice(1)] ?? 'landing';
+show(initialScreen,false,false);
+initializeBuilderPortal(API, ownedServices => {
+  const list = $('builder-owned-list');
+  list.replaceChildren();
+  if (ownedServices.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'home-empty';
+    empty.textContent = '아직 소유권이 확인된 서비스가 없어요. 아래에서 소유권을 요청하거나 새 서비스를 제출해 주세요.';
+    list.append(empty);
+    return;
+  }
+  for (const service of ownedServices) {
+    const card = createHomeServiceCard(service, true);
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'text-button';
+    edit.textContent = '수정 제안 →';
+    edit.onclick = () => {
+      $<HTMLInputElement>('builder-edit-id').value = service.id;
+      $<HTMLInputElement>('builder-service-name').value = service.name;
+      $<HTMLInputElement>('builder-service-tagline').value = service.tagline;
+      $<HTMLTextAreaElement>('builder-service-description').value = service.description;
+      $<HTMLInputElement>('builder-service-url').value = service.serviceUrl;
+      $<HTMLInputElement>('builder-service-tags').value = service.tags.join(', ');
+      $('builder-service-name').focus();
+    };
+    card.querySelector('.home-product-footer')!.append(edit);
+    list.append(card);
+  }
+});
 void loadHomeCatalog();

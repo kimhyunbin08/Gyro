@@ -89,5 +89,6 @@
 - 웹 앱은 Tailwind가 아닌 Vite/plain CSS이므로 색상·타이포그래피·모서리 값은
   `apps/web/src/themes/`의 의미 토큰을 사용하고 Tailwind 설정을 추가하지 않는다.
 - 지원 테마는 Paper, Clay, Midnight이며, 선택은 브라우저 로컬 설정으로만 유지한다.
-- 기본 테마는 Midnight다. 공통 고정 메뉴는 "홈", "주제별 탐색", "작업으로 찾기" 용어를 유지하고,
+- 랜딩은 유저 Paper / 빌더 Midnight로 전환한다. 서비스 공통 탭은 "홈", "내 피드", "발견", "설정"이며,
+  "주제별 탐색", "작업으로 찾기"는 발견 안에 유지한다(`prd.md` §9-7-1). 서비스 테마 선호는 랜딩과 분리하고,
   UI 폰트는 ThemeAI Geist/Fraunces와 한글 Noto Sans KR 글리프 fallback을 사용한다.

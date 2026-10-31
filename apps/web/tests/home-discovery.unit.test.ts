@@ -31,17 +31,19 @@ describe('web unit: home discovery and appearance settings', () => {
     mountApp();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    window.history.replaceState(null, '', '/');
     Object.defineProperty(window, 'scrollTo', { configurable: true, value: vi.fn() });
   });
 
-  it('presents the chat prompt first and the discovery explanation below it', () => {
+  it('separates the marketing landing, AI workspace and searchable discovery', () => {
     mountApp();
 
-    expect(document.getElementById('hero-title')!.textContent).toContain('찾고 있는 AI나 서비스');
+    expect(document.getElementById('hero-title')!.textContent).toContain('오늘은 어떤 일을');
     expect(document.getElementById('assistant-thread')!.children).toHaveLength(0);
-    expect(document.getElementById('explainer-title')!.textContent).toContain('막힌 일을 말하면');
-    expect(document.querySelector('.discovery-explainer')?.nextElementSibling?.classList.contains('home-catalog')).toBe(true);
-    expect([...document.querySelectorAll('[data-primary-nav]')].map((button) => button.textContent?.trim())).toContain('주제별 탐색');
+    expect(document.querySelector('#landing form')).toBeNull();
+    expect(document.querySelector('#home #assistant-form')).not.toBeNull();
+    expect(document.querySelector('#discovery #service-search')).not.toBeNull();
+    expect(document.querySelector('#discovery #theme-entry-button')!.textContent).toBe('주제별 탐색');
   });
 
   it('loads searchable service cards immediately and filters by query and kind', async () => {
@@ -109,10 +111,10 @@ describe('web unit: home discovery and appearance settings', () => {
     expect(document.getElementById('assistant-thread')!.textContent).toContain('회의 일정 연결을 도와주는 후보');
     expect(document.getElementById('assistant-thread')!.textContent).toContain('Calendar MCP');
     expect(document.getElementById('assistant-thread')!.textContent).toContain('요금 확인 필요');
-    expect(document.getElementById('landing')!.classList.contains('has-assistant-conversation')).toBe(true);
+    expect(document.getElementById('home')!.classList.contains('has-assistant-conversation')).toBe(true);
 
     document.getElementById('assistant-reset')!.click();
-    expect(document.getElementById('landing')!.classList.contains('has-assistant-conversation')).toBe(false);
+    expect(document.getElementById('home')!.classList.contains('has-assistant-conversation')).toBe(false);
     expect(document.getElementById('assistant-thread')!.children).toHaveLength(0);
   });
 
@@ -126,10 +128,10 @@ describe('web unit: home discovery and appearance settings', () => {
     }));
     await loadAppModule();
 
-    expect(document.documentElement.dataset.theme).toBe('midnight');
-    expect(document.querySelector('[data-app-theme="midnight"]')!.getAttribute('aria-pressed')).toBe('true');
+    expect(document.documentElement.dataset.theme).toBe('paper');
+    expect(document.querySelector('[data-app-theme="paper"]')!.getAttribute('aria-pressed')).toBe('true');
     (document.getElementById('theme-settings-button') as HTMLButtonElement).click();
-    expect(document.getElementById('theme-settings')!.classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('settings')!.classList.contains('hidden')).toBe(false);
     document.querySelector<HTMLButtonElement>('[data-app-theme="midnight"]')!.click();
 
     expect(document.documentElement.dataset.theme).toBe('midnight');
@@ -147,23 +149,23 @@ describe('web unit: home discovery and appearance settings', () => {
     await loadAppModule();
 
     expect(indexHtml).toContain('<title>Gyro — 내가 필요한 서비스 찾기</title>');
-    expect(indexHtml).toContain('<html lang="ko" data-theme="midnight">');
+    expect(indexHtml).toContain('<html lang="ko" data-theme="paper" data-surface="landing">');
     expect(indexHtml).toContain('family=Noto+Sans+KR');
-    expect(document.getElementById('brand-home')!.textContent).toContain('내가 필요한 서비스 찾기');
+    expect(document.getElementById('brand-home')!.textContent).toContain('발견이 시작되는 곳');
     expect([...document.querySelectorAll('[data-primary-nav]')].map(button => button.textContent?.trim())).toEqual([
       '홈',
-      '주제별 탐색',
-      '작업으로 찾기',
-      '인기 서비스',
+      '내 피드',
+      '발견',
+      '설정',
     ]);
 
     (document.getElementById('task-entry-button') as HTMLButtonElement).click();
     expect(document.getElementById('task-discovery')!.classList.contains('hidden')).toBe(false);
-    expect(document.getElementById('task-entry-button')!.getAttribute('aria-current')).toBe('page');
+    expect(document.getElementById('catalog-nav')!.getAttribute('aria-current')).toBe('page');
     expect(document.getElementById('theme-settings-button')).not.toBeNull();
 
     (document.getElementById('discover-nav') as HTMLButtonElement).click();
-    expect(document.getElementById('landing')!.classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('home')!.classList.contains('hidden')).toBe(false);
     expect(document.activeElement).toBe(document.getElementById('assistant-message'));
     await flush();
   });
