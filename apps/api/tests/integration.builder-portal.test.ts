@@ -124,8 +124,36 @@ describe('builder portal and public comments', () => {
     vi.stubEnv('WEB_ORIGIN', 'http://localhost:4173');
     vi.stubEnv('BUILDER_ADMIN_TOKEN', 'test-admin-token');
     vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('GYRO_BUILDER_PORTAL_ENABLED', 'true');
   });
   afterEach(() => vi.unstubAllEnvs());
+
+  it.each(['', 'false'])('keeps builder and comment APIs disabled without launch approval (%s)', async (enabled) => {
+    vi.stubEnv('GYRO_BUILDER_PORTAL_ENABLED', enabled);
+    const store = createStore();
+    const listServices = vi.spyOn(store, 'listServices');
+    const createComment = vi.spyOn(store, 'createComment');
+    const app = createApp({ builderStore: store });
+    expect((await request(app).get('/api/builder/me')).status).toBe(503);
+    expect((await request(app).get('/api/admin/builders')).status).toBe(503);
+    expect((await request(app).get('/api/services/2026-06-1/comments')).status).toBe(503);
+    expect((await request(app).post('/api/services/2026-06-1/comments')
+      .send({ body: '공개 전에는 게시되면 안 됩니다.' })).status).toBe(503);
+    expect((await request(app).post('/api/services/2026-06-1/comments/comment-1/report')).status).toBe(503);
+    expect((await request(app).get('/api/services')).status).toBe(200);
+    expect(listServices).not.toHaveBeenCalled();
+    expect(createComment).not.toHaveBeenCalled();
+  });
+
+  it('refuses comment publication without a configured moderator', async () => {
+    vi.stubEnv('BUILDER_ADMIN_TOKEN', '');
+    const store = createStore();
+    const createComment = vi.spyOn(store, 'createComment');
+    const response = await request(createApp({ builderStore: store }))
+      .post('/api/services/2026-06-1/comments').send({ body: '운영자 설정이 필요합니다.' });
+    expect(response.status).toBe(503);
+    expect(createComment).not.toHaveBeenCalled();
+  });
 
   it('uses a one-time email link and requires the configured web origin', async () => {
     const store = createStore();
@@ -186,6 +214,10 @@ describe('builder portal and public comments', () => {
     expect(approved.status).toBe(200);
     const afterApproval = await request(app).get('/api/services?shuffle=vibe-venture');
     expect(afterApproval.body.services.some((service: CatalogService) => service.name === draft.name)).toBe(true);
+    const defaultCatalog = await request(app).get('/api/services');
+    expect(defaultCatalog.body.services.some((service: CatalogService) => service.name === draft.name)).toBe(true);
+    const emerging = await request(app).get('/api/services?tier=emerging');
+    expect(emerging.body.services.some((service: CatalogService) => service.name === draft.name)).toBe(false);
   });
 
   it('requires explicit program participation verification before approving builder write access', async () => {
@@ -261,6 +293,10 @@ describe('builder portal and public comments', () => {
     expect(themed.body.services.find((service: CatalogService) => service.id === 'sns-1')?.name).toBe(draft.name);
     const otherTheme = await request(app).get('/api/services?shuffle=dating');
     expect(otherTheme.body.services.some((service: CatalogService) => service.id === 'sns-1')).toBe(false);
+    for (const path of ['/api/services', '/api/services?shuffle=vibe-venture', '/api/services?shuffle=unknown']) {
+      const defaultCatalog = await request(app).get(path);
+      expect(defaultCatalog.body.services.some((service: CatalogService) => service.id === 'sns-1')).toBe(false);
+    }
   });
 
   it('allows the configured web origin to preflight admin PATCH and DELETE requests', async () => {

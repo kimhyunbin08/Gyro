@@ -43,8 +43,10 @@ Actions 배포도 웹 리비전에 `GYRO_API_URL`을 실제 API FQDN으로 주�
 
 ## 빌더 포털 설정 및 공개 전 검토
 
-빌더 포털은 API에 아래 설정이 있을 때만 작동합니다. `DATABASE_URL`이 없으면 기존 공개 발견 기능은
-계속 동작하고, 빌더/댓글 API는 `503`으로 비활성 상태를 반환합니다.
+빌더 포털과 공개 댓글은 기본 비활성 상태입니다. 기존 `DATABASE_URL`이 있더라도 자동으로 켜지지 않습니다.
+담당 기관·법률 검토와 아래 설정을 마친 후에만 `GYRO_BUILDER_PORTAL_ENABLED=true`를 명시하세요.
+비활성 상태에서는 DB에 연결하거나 스키마를 변경하지 않으며 빌더/댓글/관리자 API는 `503`을 반환합니다.
+기존 공개 발견 기능은 계속 동작합니다. 공개 설정이 켜졌는데 필수 설정이 누락되면 API 시작이 실패합니다.
 
 - `DATABASE_URL`: private networking/firewall로 API Container App의 outbound만 허용하는 PostgreSQL 연결 문자열.
 - `AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING` 및 `AZURE_COMMUNICATION_EMAIL_SENDER`: 검증된 Azure
@@ -57,6 +59,8 @@ Actions 배포도 웹 리비전에 `GYRO_API_URL`을 실제 API FQDN으로 주�
 리소스와 안전한 네트워크 경계를 준비하고, 연결 문자열·메일 비밀·관리자 토큰을 API Container App secret으로
 등록해야 합니다. 공개 DB 방화벽에 전체 인터넷이나 광범위한 Azure 주소를 허용하지 마세요. 개발용 `.env`에는
 실제 비밀을 입력하지 말고 로컬 secret store를 사용하세요.
+기존 PostgreSQL도 방화벽을 별도로 확인하세요. `0.0.0.0`의 "모든 Azure 서비스 허용" 규칙은
+API outbound만 허용하는 경계가 아니므로 빌더/댓글 공개 전에 private networking 또는 제한된 규칙으로 교체해야 합니다.
 
 기능 배포와 공개 허가는 별개입니다. 공개 전 `VIBE_VENTURE_REVIEW_QUESTIONS.md`의 학생 저작권/공개 권한,
 미성년자 계정·댓글, 개인정보 처리 역할 및 보존/삭제, 댓글 신고·삭제 운영 질문을 바이브벤처 담당자와

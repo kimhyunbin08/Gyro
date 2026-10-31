@@ -20,6 +20,9 @@
     "apps/*",
     "packages/*"
   ],
+  "overrides": {
+    "zod": "4.6.7"
+  },
   "devDependencies": {
     "@types/node": "^26.2.0",
     "typescript": "^7.0.2",
