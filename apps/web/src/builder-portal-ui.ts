@@ -14,6 +14,12 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string): 
   return node;
 }
 
+export function formatInterestReaction(likes: number, dislikes: number): string {
+  const responses = likes + dislikes;
+  if (responses === 0) return '관심 있음 선택 비율: 응답 없음 (0건)';
+  return `관심 있음 선택 비율: ${Math.round((likes / responses) * 100)}% (${likes}/${responses}건, 관심 있음/없음 응답 기준; 건너뛰기 제외)`;
+}
+
 export function initializeBuilderPortal(apiBase: string, renderOwnedServices?: (services: CatalogService[]) => void): void {
   const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
     const response = await fetch(`${apiBase}${path}`, {
@@ -196,9 +202,14 @@ export function initializeBuilderPortal(apiBase: string, renderOwnedServices?: (
         container.append(element('p', '아직 승인된 서비스가 없습니다. 기존 서비스 소유권을 요청하거나 새 서비스를 제출해 주세요.'));
         return;
       }
+      container.append(element(
+        'p',
+        '비율은 누적 카드 반응 이벤트 기준이며 고유 사용자 수나 최종 의향률이 아닙니다. 되돌리기 기록은 별도로 차감되지 않습니다.',
+      ));
       for (const service of services) {
         container.append(card(service.name, [
           `서비스 ID: ${service.serviceId}`,
+          formatInterestReaction(service.likes, service.dislikes),
           `카드 반응: ${service.impressions}회 · 관심 있음 ${service.likes}회 · 관심 없음 ${service.dislikes}회`,
           `미리보기 ${service.previewClicks}회 · 별점 ${service.ratings}건${service.averageRating === null ? '' : ` (평균 ${service.averageRating.toFixed(1)})`}`,
           `공개 댓글 ${service.comments}건`,
