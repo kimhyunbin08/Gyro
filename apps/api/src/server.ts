@@ -260,7 +260,7 @@ export function createApp(options: AppOptions = {}) {
     const { token, tokenHash } = createMagicToken();
     try {
       await builderStore.issueMagicLink(email, tokenHash, new Date(Date.now() + 15 * 60 * 1000));
-      const link = new URL('/builder', webOrigin);
+      const link = new URL('/', webOrigin);
       link.hash = new URLSearchParams({ token }).toString();
       await sendMagicLink(email, link.toString());
       res.status(202).json({ accepted: true, message: '로그인 링크를 요청한 이메일로 보냈습니다.' });

@@ -649,6 +649,8 @@ type CatalogService = {                             // 기존 필드에 아래 o
   7일 만료다. 세션 쿠키는 HttpOnly이며, 프로덕션에서 Secure/SameSite=None을 사용한다. 빌더 변경
   요청은 `WEB_ORIGIN`과 정확히 일치하는 Origin만 허용한다. 관리자 인증은 `BUILDER_ADMIN_TOKEN`과
   constant-time 비교를 사용하고 브라우저 `sessionStorage`/`localStorage`에 토큰을 저장하지 않는다.
+  매직링크는 정적 호스팅에서 직접 열 수 있는 웹 루트의 `/#token=...` 형식을 사용하며, 웹앱이
+  토큰을 확인하면 빌더 화면으로 전환한다. 서버 라우팅이 없는 `/builder` 경로는 사용하지 않는다.
 - 이메일은 `AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING`과 `AZURE_COMMUNICATION_EMAIL_SENDER`로
   Azure Communication Services Email에서 발송한다. 설정이 없거나 발송이 실패하면 성공 응답으로 숨기지 않는다.
 - 댓글은 기본 익명, 선택 닉네임, 이메일 미수집이다. 텍스트는 브라우저에서 HTML로 해석하지 않고

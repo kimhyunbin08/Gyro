@@ -167,6 +167,7 @@ describe('builder portal and public comments', () => {
       .set('Origin', 'http://localhost:4173')
       .send({ email: 'maker@example.com' });
     expect(sent.status).toBe(202);
+    expect(new URL(link).pathname).toBe('/');
     expect(new URLSearchParams(new URL(link).hash.slice(1)).get('token')).toBeTruthy();
 
     const token = new URLSearchParams(new URL(link).hash.slice(1)).get('token')!;
