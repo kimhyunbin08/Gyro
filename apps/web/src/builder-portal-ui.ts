@@ -1,3 +1,5 @@
+import type { CatalogService } from './catalog-loader.js';
+
 type BuilderStatus = 'pending' | 'approved' | 'suspended';
 type BuilderAccount = { email: string; status: BuilderStatus; programVerified: boolean };
 type ApiError = { message?: string };
@@ -12,7 +14,7 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string): 
   return node;
 }
 
-export function initializeBuilderPortal(apiBase: string): void {
+export function initializeBuilderPortal(apiBase: string, renderOwnedServices?: (services: CatalogService[]) => void): void {
   const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
     const response = await fetch(`${apiBase}${path}`, {
       ...init,
@@ -38,7 +40,6 @@ export function initializeBuilderPortal(apiBase: string): void {
     return item;
   };
 
-  document.getElementById('builder-nav')?.addEventListener('click', () => navigate('builder'));
   document.getElementById('builder-admin-open')?.addEventListener('click', () => navigate('builder-admin'));
   document.getElementById('builder-admin-back')?.addEventListener('click', () => navigate('builder'));
 
@@ -82,22 +83,27 @@ export function initializeBuilderPortal(apiBase: string): void {
     } catch (error) {
       login.classList.remove('hidden');
       panel.classList.add('hidden');
+      renderOwnedServices?.([]);
       statusText('builder-login-status', messageFrom(error));
     }
   };
 
   const tokenFromUrl = new URLSearchParams(location.hash.slice(1)).get('token');
   if (tokenFromUrl) {
+    const clearToken = () => {
+      const hash = location.hash.startsWith('#token=') ? '#feed' : location.hash;
+      history.replaceState(null, '', `${location.pathname}${location.search}${hash}`);
+    };
     navigate('builder');
     void request<{ builder: BuilderAccount }>('/api/builder/auth/verify', {
       method: 'POST',
       body: JSON.stringify({ token: tokenFromUrl }),
     }).then(async () => {
-      history.replaceState(null, '', location.pathname);
+      clearToken();
       statusText('builder-login-status', '로그인되었습니다.');
       await loadAccount();
     }).catch((error: unknown) => {
-      history.replaceState(null, '', location.pathname);
+      clearToken();
       statusText('builder-login-status', messageFrom(error));
     });
   } else {
@@ -109,6 +115,7 @@ export function initializeBuilderPortal(apiBase: string): void {
       await request('/api/builder/auth/logout', { method: 'POST' });
       document.getElementById('builder-account-panel')?.classList.add('hidden');
       document.getElementById('builder-login-form')?.classList.remove('hidden');
+      renderOwnedServices?.([]);
       statusText('builder-login-status', '로그아웃했어요.');
     } catch (error) {
       statusText('builder-account-status', messageFrom(error));
@@ -156,7 +163,8 @@ export function initializeBuilderPortal(apiBase: string): void {
 
   async function loadOwnedServices(): Promise<void> {
     try {
-      const { services } = await request<{ services: Array<{ id: string; name: string }> }>('/api/builder/services');
+      const { services } = await request<{ services: CatalogService[] }>('/api/builder/services');
+      renderOwnedServices?.(services);
       const select = document.getElementById('builder-edit-id') as HTMLInputElement;
       select.setAttribute('list', 'builder-service-options');
       let options = document.getElementById('builder-service-options') as HTMLDataListElement | null;
