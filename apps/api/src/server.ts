@@ -1,5 +1,7 @@
 import express, { NextFunction, Request, Response } from 'express';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
+import type { CatalogService } from './catalog.js';
 import { checkServiceHealth, resolveServiceUrl, startCatalogHealthMonitor } from './services/health-check.service.js';
 import { allShuffleServices, filterByTier, findServiceById, resolveShuffleCatalog } from './shuffles.js';
 import { getServiceImage } from './image-proxy.js';
@@ -14,6 +16,15 @@ import {
 } from './assistant-recommendation.js';
 import { copilotConfiguration, isLocalAssistantRequest } from './copilot-provider.js';
 import { dedupeCatalog, healthyCatalog } from './services/discovery-catalog.js';
+import {
+  createMagicToken,
+  createPostgresBuilderStore,
+  digestToken,
+  sendBuilderMagicLink,
+  type BuilderIdentity,
+  type BuilderPortalStore,
+  type BuilderServiceDraft,
+} from './builder-portal.js';
 
 type EventName =
   | 'landing_view'
@@ -88,6 +99,31 @@ const emailSchema = z.object({
   email: z.string().trim().email().max(254),
   updatesOptIn: z.boolean(),
 });
+const builderEmailSchema = z.object({ email: z.string().trim().email().max(254) });
+const magicTokenSchema = z.object({ token: z.string().min(32).max(128) });
+const ownershipRequestSchema = z.object({
+  serviceId: z.string().min(1).max(120),
+  evidence: z.string().url().max(500).refine((value) => new URL(value).protocol === 'https:'),
+});
+const builderServiceDraftSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  tagline: z.string().trim().min(8).max(160),
+  description: z.string().trim().min(20).max(2000),
+  serviceUrl: z.string().url().max(500).refine((value) => new URL(value).protocol === 'https:'),
+  tags: z.array(z.string().trim().min(1).max(30)).min(1).max(12),
+});
+const publicCommentSchema = z.object({
+  nickname: z.string().trim().max(30).optional(),
+  body: z.string().trim().min(2).max(2000),
+});
+const adminStatusSchema = z.object({
+  status: z.enum(['approved', 'suspended']),
+  programVerified: z.boolean(),
+}).refine((value) => value.status !== 'approved' || value.programVerified, {
+  message: '바이브벤처 프로그램 참여 확인이 필요합니다.',
+});
+const adminOwnershipSchema = z.object({ approved: z.boolean() });
+const adminCommentSchema = z.object({ visible: z.boolean() });
 
 // 랭킹·퍼널 집계는 셔플을 구분하지 않고 기존 카탈로그와 작업 카탈로그 전체를 대상으로 한다.
 // 셔플 간 URL 중복도 동일한 dedupe 규칙으로 걸러낸다.
@@ -97,18 +133,61 @@ function allowedOrigin(): string {
   return process.env.WEB_ORIGIN || '*';
 }
 
-export function createApp() {
+export type AppOptions = {
+  builderStore?: BuilderPortalStore | null;
+  sendMagicLink?: (email: string, link: string) => Promise<void>;
+};
+
+function requestCookie(req: Request, name: string): string | undefined {
+  const cookie = req.headers.cookie?.split(';').map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`));
+  return cookie ? cookie.slice(name.length + 1) : undefined;
+}
+
+function hasExpectedOrigin(req: Request): boolean {
+  const configuredOrigin = process.env.WEB_ORIGIN;
+  return Boolean(configuredOrigin && configuredOrigin !== '*' && req.get('origin') === configuredOrigin);
+}
+
+function adminAuthorized(req: Request): boolean {
+  const expected = process.env.BUILDER_ADMIN_TOKEN;
+  const provided = req.get('x-admin-token') ?? '';
+  if (!expected || !provided) return false;
+  const expectedBuffer = Buffer.from(expected);
+  const providedBuffer = Buffer.from(provided);
+  return expectedBuffer.length === providedBuffer.length && timingSafeEqual(expectedBuffer, providedBuffer);
+}
+
+function mergeCatalog(base: CatalogService[], submitted: CatalogService[]): CatalogService[] {
+  const merged = new Map(base.map((service) => [service.id, service]));
+  for (const service of submitted) merged.set(service.id, service);
+  return [...merged.values()];
+}
+
+function isCatalogService(serviceId: string): boolean {
+  return Boolean(findServiceById(serviceId));
+}
+
+export function createApp(options: AppOptions = {}) {
+  const builderStore = options.builderStore ?? null;
+  const sendMagicLink = options.sendMagicLink ?? sendBuilderMagicLink;
   const events: Array<{ name: EventName; sessionId: string; metadata: Record<string, unknown>; createdAt: string }> = [];
   const emailLeads = new Set<string>();
   const assistantRateLimits = new Map<string, { count: number; resetAt: number }>();
+  const builderAuthLimits = new Map<string, { count: number; resetAt: number }>();
+  const commentLimits = new Map<string, { count: number; resetAt: number }>();
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
   app.use((_req: Request, res: Response, next: NextFunction) => {
-    res.header('Access-Control-Allow-Origin', allowedOrigin());
+    const origin = _req.get('origin');
+    const configuredOrigin = allowedOrigin();
+    if (configuredOrigin === '*') res.header('Access-Control-Allow-Origin', '*');
+    else if (origin === configuredOrigin) res.header('Access-Control-Allow-Origin', origin);
     res.header('Vary', 'Origin');
-    res.header('Access-Control-Allow-Headers', 'Content-Type');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Token');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    if (configuredOrigin !== '*') res.header('Access-Control-Allow-Credentials', 'true');
     if (_req.method === 'OPTIONS') return res.sendStatus(204);
     next();
   });
@@ -118,13 +197,290 @@ export function createApp() {
     res.json({ status: 'ok', service: 'gyro-api', timestamp: new Date().toISOString() });
   });
 
+  const builderFromRequest = async (req: Request): Promise<BuilderIdentity | null> => {
+    if (!builderStore) return null;
+    const token = requestCookie(req, 'gyro_builder_session');
+    return token ? builderStore.getBuilderForSession(digestToken(token)) : null;
+  };
+  const originRequired = (req: Request, res: Response): boolean => {
+    if (hasExpectedOrigin(req)) return true;
+    res.status(403).json({ message: '요청 출처를 확인할 수 없습니다.' });
+    return false;
+  };
+  const builderRequired = async (req: Request, res: Response, approved = true): Promise<BuilderIdentity | null> => {
+    if (!builderStore) {
+      res.status(503).json({ message: '빌더 포털 저장소가 아직 설정되지 않았어요.' });
+      return null;
+    }
+    const builder = await builderFromRequest(req);
+    if (!builder) {
+      res.status(401).json({ message: '로그인이 필요합니다.' });
+      return null;
+    }
+    if (builder.status === 'suspended' || (approved && (builder.status !== 'approved' || builder.programVerified !== true))) {
+      res.status(403).json({ message: '바이브벤처 프로그램 참여와 빌더 계정 승인이 필요합니다.' });
+      return null;
+    }
+    return builder;
+  };
+  const rateLimited = (map: Map<string, { count: number; resetAt: number }>, key: string, limit: number, windowMs: number): boolean => {
+    const now = Date.now();
+    for (const [entryKey, value] of map) if (value.resetAt <= now) map.delete(entryKey);
+    const entry = map.get(key);
+    if (!entry || entry.resetAt <= now) {
+      map.set(key, { count: 1, resetAt: now + windowMs });
+      return false;
+    }
+    entry.count++;
+    return entry.count > limit;
+  };
+  const publishedCatalog = async (): Promise<CatalogService[]> => {
+    const userServices = builderStore ? await builderStore.listServices() : [];
+    return mergeCatalog(dedupedAllShuffles, userServices);
+  };
+
+  app.post('/api/builder/auth/request', async (req, res) => {
+    if (!originRequired(req, res)) return;
+    if (!builderStore) return res.status(503).json({ message: '빌더 포털 저장소가 아직 설정되지 않았어요.' });
+    const parsed = builderEmailSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: '올바른 이메일 주소를 입력해 주세요.' });
+    const email = parsed.data.email.toLowerCase();
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    if (rateLimited(builderAuthLimits, `ip:${ip}`, 3, 15 * 60 * 1000)
+      || rateLimited(builderAuthLimits, `email:${email}`, 1, 5 * 60 * 1000)) {
+      return res.status(429).json({ message: '로그인 링크 요청이 많아요. 잠시 후 다시 시도해 주세요.' });
+    }
+    const webOrigin = process.env.WEB_ORIGIN;
+    if (!webOrigin || webOrigin === '*') return res.status(503).json({ message: '빌더 로그인 주소 설정이 필요합니다.' });
+    const { token, tokenHash } = createMagicToken();
+    try {
+      await builderStore.issueMagicLink(email, tokenHash, new Date(Date.now() + 15 * 60 * 1000));
+      const link = new URL('/builder', webOrigin);
+      link.hash = new URLSearchParams({ token }).toString();
+      await sendMagicLink(email, link.toString());
+      res.status(202).json({ accepted: true, message: '로그인 링크를 요청한 이메일로 보냈습니다.' });
+    } catch (error) {
+      await builderStore.revokeMagicLink(tokenHash);
+      console.error('Builder magic-link request failed.', error instanceof Error ? error.message : 'unknown error');
+      res.status(503).json({ message: '로그인 링크를 보내지 못했어요. 잠시 후 다시 시도해 주세요.' });
+    }
+  });
+
+  app.post('/api/builder/auth/verify', async (req, res) => {
+    if (!originRequired(req, res)) return;
+    if (!builderStore) return res.status(503).json({ message: '빌더 포털 저장소가 아직 설정되지 않았어요.' });
+    const parsed = magicTokenSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: '로그인 링크가 올바르지 않습니다.' });
+    const builder = await builderStore.consumeMagicLink(digestToken(parsed.data.token));
+    if (!builder || builder.status === 'suspended') return res.status(401).json({ message: '로그인 링크가 만료되었거나 사용할 수 없습니다.' });
+    const sessionToken = randomBytes(32).toString('base64url');
+    await builderStore.createSession(builder.id, digestToken(sessionToken), new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+    const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+    const sameSite = process.env.NODE_ENV === 'production' ? 'None' : 'Lax';
+    res.setHeader('Set-Cookie', `gyro_builder_session=${sessionToken}; Path=/api/builder; HttpOnly; SameSite=${sameSite}; Max-Age=604800${secure}`);
+    res.json({ builder: { email: builder.email, status: builder.status, programVerified: builder.programVerified === true } });
+  });
+
+  app.get('/api/builder/me', async (req, res) => {
+    if (!builderStore) return res.status(503).json({ message: '빌더 포털 저장소가 아직 설정되지 않았어요.' });
+    const builder = await builderFromRequest(req);
+    if (!builder) return res.status(401).json({ message: '로그인이 필요합니다.' });
+    res.json({ builder: { email: builder.email, status: builder.status, programVerified: builder.programVerified === true } });
+  });
+
+  app.post('/api/builder/auth/logout', async (req, res) => {
+    if (!originRequired(req, res)) return;
+    if (builderStore) {
+      const token = requestCookie(req, 'gyro_builder_session');
+      if (token) await builderStore.deleteSession(digestToken(token));
+    }
+    const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+    const sameSite = process.env.NODE_ENV === 'production' ? 'None' : 'Lax';
+    res.setHeader('Set-Cookie', `gyro_builder_session=; Path=/api/builder; HttpOnly; SameSite=${sameSite}; Max-Age=0${secure}`);
+    res.status(204).end();
+  });
+
+  app.get('/api/builder/services', async (req, res) => {
+    const builder = await builderRequired(req, res);
+    if (!builder || !builderStore) return;
+    const ownedIds = await builderStore.listOwnedServiceIds(builder.id);
+    const catalog = await publishedCatalog();
+    res.json({ services: catalog.filter((service) => ownedIds.includes(service.id)) });
+  });
+
+  app.post('/api/builder/services/ownership-requests', async (req, res) => {
+    if (!originRequired(req, res)) return;
+    const builder = await builderRequired(req, res, false);
+    if (!builder || !builderStore) return;
+    const parsed = ownershipRequestSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: '소유권 확인 요청을 다시 확인해 주세요.' });
+    if (!isCatalogService(parsed.data.serviceId)) return res.status(404).json({ message: '카탈로그 서비스를 찾을 수 없습니다.' });
+    await builderStore.requestOwnership(builder.id, parsed.data.serviceId, parsed.data.evidence);
+    res.status(202).json({ submitted: true, message: '소유권 확인 요청을 접수했어요.' });
+  });
+
+  app.post('/api/builder/services', async (req, res) => {
+    if (!originRequired(req, res)) return;
+    const builder = await builderRequired(req, res);
+    if (!builder || !builderStore) return;
+    const parsed = builderServiceDraftSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: '서비스 정보와 공식 HTTPS 링크를 확인해 주세요.' });
+    const draft: BuilderServiceDraft = { ...parsed.data };
+    await builderStore.createSubmission(builder.id, null, draft);
+    res.status(202).json({ submitted: true, message: '서비스 등록을 검수 대기열에 제출했어요.' });
+  });
+
+  app.post('/api/builder/services/:id/proposals', async (req, res) => {
+    if (!originRequired(req, res)) return;
+    const builder = await builderRequired(req, res);
+    if (!builder || !builderStore) return;
+    const parsed = builderServiceDraftSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: '서비스 정보와 공식 HTTPS 링크를 확인해 주세요.' });
+    if (!await builderStore.ownsService(builder.id, req.params.id)) return res.status(404).json({ message: '수정 권한이 있는 서비스를 찾을 수 없습니다.' });
+    await builderStore.createSubmission(builder.id, req.params.id, parsed.data);
+    res.status(202).json({ submitted: true, message: '수정 제안을 검수 대기열에 제출했어요.' });
+  });
+
+  app.get('/api/builder/dashboard', async (req, res) => {
+    const builder = await builderRequired(req, res);
+    if (!builder || !builderStore) return;
+    const ownedIds = await builderStore.listOwnedServiceIds(builder.id);
+    const rows = await builderStore.getDashboard(builder.id);
+    const catalog = await publishedCatalog();
+    const names = new Map(catalog.map((service) => [service.id, service.name]));
+    res.json({ services: rows.filter((row) => ownedIds.includes(row.serviceId)).map((row) => ({ ...row, name: names.get(row.serviceId) ?? row.name })) });
+  });
+
+  app.get('/api/admin/builders', async (req, res) => {
+    if (!adminAuthorized(req)) return res.status(401).json({ message: '운영자 인증이 필요합니다.' });
+    if (!builderStore) return res.status(503).json({ message: '빌더 포털 저장소가 아직 설정되지 않았어요.' });
+    res.json({ builders: await builderStore.listBuilders() });
+  });
+
+  app.patch('/api/admin/builders/:id', async (req, res) => {
+    if (!adminAuthorized(req)) return res.status(401).json({ message: '운영자 인증이 필요합니다.' });
+    if (!builderStore) return res.status(503).json({ message: '빌더 포털 저장소가 아직 설정되지 않았어요.' });
+    const parsed = adminStatusSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: '상태 변경 값이 올바르지 않습니다.' });
+    const updated = await builderStore.setBuilderStatus(
+      req.params.id,
+      parsed.data.status,
+      parsed.data.programVerified,
+    );
+    if (!updated) return res.status(404).json({ message: '빌더를 찾을 수 없습니다.' });
+    res.json({ updated: true });
+  });
+
+  app.get('/api/admin/ownership-requests', async (req, res) => {
+    if (!adminAuthorized(req)) return res.status(401).json({ message: '운영자 인증이 필요합니다.' });
+    if (!builderStore) return res.status(503).json({ message: '빌더 포털 저장소가 아직 설정되지 않았어요.' });
+    res.json({ requests: await builderStore.listOwnershipRequests() });
+  });
+
+  app.patch('/api/admin/ownership-requests/:id', async (req, res) => {
+    if (!adminAuthorized(req)) return res.status(401).json({ message: '운영자 인증이 필요합니다.' });
+    if (!builderStore) return res.status(503).json({ message: '빌더 포털 저장소가 아직 설정되지 않았어요.' });
+    const parsed = adminOwnershipSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: '소유권 승인 값이 올바르지 않습니다.' });
+    const updated = await builderStore.resolveOwnershipRequest(req.params.id, parsed.data.approved);
+    if (!updated) return res.status(404).json({ message: '대기 중인 소유권 요청을 찾을 수 없습니다.' });
+    res.json({ updated: true });
+  });
+
+  app.get('/api/admin/submissions', async (req, res) => {
+    if (!adminAuthorized(req)) return res.status(401).json({ message: '운영자 인증이 필요합니다.' });
+    if (!builderStore) return res.status(503).json({ message: '빌더 포털 저장소가 아직 설정되지 않았어요.' });
+    res.json({ submissions: await builderStore.listSubmissions() });
+  });
+
+  app.post('/api/admin/submissions/:id/approve', async (req, res) => {
+    if (!adminAuthorized(req)) return res.status(401).json({ message: '운영자 인증이 필요합니다.' });
+    if (!builderStore) return res.status(503).json({ message: '빌더 포털 저장소가 아직 설정되지 않았어요.' });
+    const updated = await builderStore.approveSubmission(req.params.id);
+    if (!updated) return res.status(404).json({ message: '검수 대기 중인 제출을 찾을 수 없습니다.' });
+    res.json({ approved: true });
+  });
+
+  app.post('/api/admin/submissions/:id/reject', async (req, res) => {
+    if (!adminAuthorized(req)) return res.status(401).json({ message: '운영자 인증이 필요합니다.' });
+    if (!builderStore) return res.status(503).json({ message: '빌더 포털 저장소가 아직 설정되지 않았어요.' });
+    const rejected = await builderStore.rejectSubmission(req.params.id);
+    if (!rejected) return res.status(404).json({ message: '검수 대기 중인 제출을 찾을 수 없습니다.' });
+    res.json({ rejected: true });
+  });
+
+  app.get('/api/admin/reported-comments', async (req, res) => {
+    if (!adminAuthorized(req)) return res.status(401).json({ message: '운영자 인증이 필요합니다.' });
+    if (!builderStore) return res.status(503).json({ message: '빌더 포털 저장소가 아직 설정되지 않았어요.' });
+    res.json({ comments: await builderStore.listReportedComments() });
+  });
+
+  app.patch('/api/admin/comments/:id', async (req, res) => {
+    if (!adminAuthorized(req)) return res.status(401).json({ message: '운영자 인증이 필요합니다.' });
+    if (!builderStore) return res.status(503).json({ message: '빌더 포털 저장소가 아직 설정되지 않았어요.' });
+    const parsed = adminCommentSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: '댓글 공개 상태가 올바르지 않습니다.' });
+    const updated = await builderStore.setCommentVisibility(req.params.id, parsed.data.visible);
+    if (!updated) return res.status(404).json({ message: '댓글을 찾을 수 없습니다.' });
+    res.json({ updated: true });
+  });
+
+  app.delete('/api/admin/comments/:id', async (req, res) => {
+    if (!adminAuthorized(req)) return res.status(401).json({ message: '운영자 인증이 필요합니다.' });
+    if (!builderStore) return res.status(503).json({ message: '빌더 포털 저장소가 아직 설정되지 않았어요.' });
+    const deleted = await builderStore.deleteComment(req.params.id);
+    if (!deleted) return res.status(404).json({ message: '댓글을 찾을 수 없습니다.' });
+    res.status(204).end();
+  });
+
+  app.get('/api/services/:id/comments', async (req, res) => {
+    if (!builderStore) return res.status(503).json({ message: '댓글 저장소가 아직 설정되지 않았어요.' });
+    const services = await publishedCatalog();
+    if (!services.some((service) => service.id === req.params.id)) return res.status(404).json({ message: '서비스를 찾을 수 없습니다.' });
+    res.json({ comments: await builderStore.listComments(req.params.id) });
+  });
+
+  app.post('/api/services/:id/comments', async (req, res) => {
+    if (!builderStore) return res.status(503).json({ message: '댓글 저장소가 아직 설정되지 않았어요.' });
+    const services = await publishedCatalog();
+    if (!services.some((service) => service.id === req.params.id)) return res.status(404).json({ message: '서비스를 찾을 수 없습니다.' });
+    const parsed = publicCommentSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: '댓글은 2~2,000자, 닉네임은 30자 이내로 입력해 주세요.' });
+    const clientKey = req.ip || req.socket.remoteAddress || 'unknown';
+    if (rateLimited(commentLimits, `post:${clientKey}`, 5, 60 * 60 * 1000)) {
+      return res.status(429).json({ message: '댓글 작성이 잠시 제한됐어요. 나중에 다시 시도해 주세요.' });
+    }
+    const id = await builderStore.createComment(req.params.id, parsed.data.nickname || null, parsed.data.body);
+    res.status(201).json({ id, published: true });
+  });
+
+  app.post('/api/services/:id/comments/:commentId/report', async (req, res) => {
+    if (!builderStore) return res.status(503).json({ message: '댓글 저장소가 아직 설정되지 않았어요.' });
+    const services = await publishedCatalog();
+    if (!services.some((service) => service.id === req.params.id)) return res.status(404).json({ message: '서비스를 찾을 수 없습니다.' });
+    const clientKey = req.ip || req.socket.remoteAddress || 'unknown';
+    if (rateLimited(commentLimits, `report:${clientKey}`, 20, 60 * 60 * 1000)) {
+      return res.status(429).json({ message: '신고 요청이 잠시 제한됐어요. 나중에 다시 시도해 주세요.' });
+    }
+    const reported = await builderStore.reportComment(req.params.id, req.params.commentId);
+    if (!reported) return res.status(404).json({ message: '신고할 댓글을 찾을 수 없습니다.' });
+    res.status(202).json({ accepted: true });
+  });
+
   app.get('/api/services', async (req, res) => {
     const isTaskShuffle = req.query.shuffle === 'task';
     const taskFilter = isTaskShuffle && isTaskId(req.query.task) ? req.query.task : undefined;
     const kindFilter = isTaskShuffle && ['product', 'service', 'skill', 'mcp'].includes(String(req.query.kind))
       ? String(req.query.kind)
       : undefined;
-    const source = dedupeCatalog(filterByTier(resolveShuffleCatalog(req.query.shuffle), req.query.tier))
+    const shuffleServices = resolveShuffleCatalog(req.query.shuffle);
+    const base = filterByTier(shuffleServices, req.query.tier);
+    const builderServices = builderStore ? await builderStore.listServices() : [];
+    const includesNewServices = !req.query.shuffle || req.query.shuffle === 'vibe-venture' || req.query.shuffle === 'task';
+    const source = dedupeCatalog(mergeCatalog(
+      base,
+      builderServices.filter((service) => includesNewServices || base.some(({ id }) => id === service.id)),
+    ))
       .filter((service) => !taskFilter || service.tasks?.includes(taskFilter))
       .filter((service) => !kindFilter || (service.kind ?? 'service') === kindFilter);
     const services = await healthyCatalog(source);
@@ -159,7 +515,7 @@ export function createApp() {
       if (configuration.local && !isLocalAssistantRequest(req.socket.remoteAddress, req.get('host'), req.get('origin'))) {
         return res.status(403).json({ message: '개인 Copilot 추천은 로컬 개발 요청만 허용합니다.' });
       }
-      const candidates = await healthyCatalog(dedupedAllShuffles);
+      const candidates = await healthyCatalog(await publishedCatalog());
       const { result, repository } = await getAssistantRecommendation(input, candidates);
       const byId = new Map(candidates.map((service) => [service.id, service]));
       const recommendations = result.recommendations.flatMap(({ serviceId, reason }) => {
@@ -194,7 +550,7 @@ export function createApp() {
   // service's own site instead of the lazy, often-placeholder mshots image
   // the catalog entries originally pointed at.
   app.get('/api/service-image/:id', async (req, res) => {
-    const service = findServiceById(req.params.id);
+    const service = (await publishedCatalog()).find((candidate) => candidate.id === req.params.id);
     if (!service) return res.status(404).end();
     const health = await checkServiceHealth(service.serviceUrl);
     if (health.status !== 'healthy') return res.status(503).json({ message: '현재 서비스에 접속할 수 없습니다.' });
@@ -210,7 +566,7 @@ export function createApp() {
   // Reason-tag, retry-intent, and dwell-bucket follow-up events carry
   // metadata.stage so they don't double-count the primary card_dislike /
   // preview-click events.
-  app.get('/api/services/funnel', (_req, res) => {
+  app.get('/api/services/funnel', async (_req, res) => {
     const stats = new Map<
       string,
       { likes: number; dislikes: number; skips: number; previewClicks: number; docClicks: number; connection: { success: number; partial: number; fail: number; reasons: Record<string, number> }; dislikeReasons: Record<string, number>; retryIntent: { yes: number; no: number; unsure: number }; dwellBuckets: Record<string, number> }
@@ -262,7 +618,7 @@ export function createApp() {
         }
       }
     }
-    const funnel = dedupedAllShuffles
+    const funnel = (await publishedCatalog())
       .map((service) => {
         const s = stats.get(service.id);
         const impressions = (s?.likes || 0) + (s?.dislikes || 0) + (s?.skips || 0);
@@ -297,7 +653,7 @@ export function createApp() {
   // visitors can see which services the community has found most
   // interesting so far. Purely derived from in-memory event counts; no
   // separate persistence layer, consistent with the rest of the event store.
-  app.get('/api/services/ranking', (_req, res) => {
+  app.get('/api/services/ranking', async (_req, res) => {
     const likeCounts = new Map<string, number>();
     for (const event of events) {
       if (event.name !== 'card_like') continue;
@@ -305,7 +661,7 @@ export function createApp() {
       if (typeof serviceId !== 'string') continue;
       likeCounts.set(serviceId, (likeCounts.get(serviceId) || 0) + 1);
     }
-    const ranking = dedupedAllShuffles
+    const ranking = (await publishedCatalog())
       .map((service) => ({ id: service.id, name: service.name, tagline: service.tagline, serviceUrl: resolveServiceUrl(service.serviceUrl), likeCount: likeCounts.get(service.id) || 0 }))
       .filter((entry) => entry.likeCount > 0)
       .sort((a, b) => b.likeCount - a.likeCount)
@@ -313,13 +669,14 @@ export function createApp() {
     res.json({ ranking });
   });
 
-  app.post('/api/events', (req, res) => {
+  app.post('/api/events', async (req, res) => {
     const parsed = eventSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: '이벤트 형식이 올바르지 않습니다.' });
     const metadata = parsed.data.metadata || {};
     const safeMetadata = parsed.data.name === 'connection_report'
       ? Object.fromEntries(['serviceId', 'outcome', 'reason', 'agent'].filter((key) => metadata[key] !== undefined).map((key) => [key, metadata[key]]))
       : metadata;
+    if (builderStore) await builderStore.recordFunnelEvent(parsed.data.name, safeMetadata);
     events.push({ ...parsed.data, metadata: safeMetadata, createdAt: new Date().toISOString() });
     if (events.length > 5000) events.splice(0, events.length - 5000);
     res.status(202).json({ accepted: true });
@@ -348,15 +705,29 @@ export function createApp() {
 }
 
 if (process.env.NODE_ENV !== 'test') {
-  const port = Number(process.env.PORT || 3001);
-  const host = process.env.GYRO_ASSISTANT_PROVIDER === 'copilot-local' ? '127.0.0.1' : '0.0.0.0';
-  const server = createApp().listen(port, host, () => console.log(`Gyro API listening on ${host}:${port}`));
-  const stopMonitor = startCatalogHealthMonitor(allShuffleServices().map((service) => service.serviceUrl));
-  server.on('close', stopMonitor);
-  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-    process.once(signal, () => {
-      stopMonitor();
-      server.close();
-    });
-  }
+  const start = async () => {
+    const builderStore = process.env.DATABASE_URL
+      ? createPostgresBuilderStore(process.env.DATABASE_URL)
+      : null;
+    if (builderStore) await builderStore.initialize();
+    else console.warn('Builder portal is disabled: DATABASE_URL is not configured.');
+    const port = Number(process.env.PORT || 3001);
+    const host = process.env.GYRO_ASSISTANT_PROVIDER === 'copilot-local' ? '127.0.0.1' : '0.0.0.0';
+    const server = createApp({ builderStore }).listen(port, host, () => console.log(`Gyro API listening on ${host}:${port}`));
+    const stopMonitor = startCatalogHealthMonitor(async () => [
+      ...allShuffleServices().map((service) => service.serviceUrl),
+      ...(builderStore ? (await builderStore.listServices()).map((service) => service.serviceUrl) : []),
+    ]);
+    server.on('close', stopMonitor);
+    for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+      process.once(signal, () => {
+        stopMonitor();
+        server.close();
+      });
+    }
+  };
+  void start().catch((error: unknown) => {
+    console.error('Gyro API startup failed.', error instanceof Error ? error.message : 'unknown error');
+    process.exitCode = 1;
+  });
 }

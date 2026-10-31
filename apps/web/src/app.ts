@@ -2,6 +2,8 @@ import './styles.css';
 import { createCatalogLoader, type CatalogService as Service, type CatalogKind, type CatalogShuffle as ShuffleId, type CatalogTier as ServiceTier } from './catalog-loader.js';
 import { searchCatalogServices, type ServiceSearchKind } from './service-search.js';
 import { assistantRequest, type AssistantMessage } from './assistant-conversation.js';
+import { initializeBuilderPortal } from './builder-portal-ui.js';
+import { initializePublicComments } from './public-comments.js';
 
 type Audience = 'student' | 'teacher' | 'parent' | 'other';
 type AssistantResponse = {
@@ -88,6 +90,7 @@ const SHUFFLE_TAGS: Record<ShuffleId,string[]> = {
 };
 let currentShuffle: ShuffleId = 'vibe-venture';
 const catalogLoader = createCatalogLoader(API);
+const loadPublicComments = initializePublicComments(API);
 type AppearanceTheme = 'paper' | 'clay' | 'midnight';
 const APPEARANCE_THEMES: AppearanceTheme[] = ['paper', 'clay', 'midnight'];
 const DEFAULT_APPEARANCE_THEME: AppearanceTheme = 'midnight';
@@ -103,7 +106,7 @@ let profileCatalogReady = false;
 let profileCatalogError = false;
 let profileLoadToken = 0;
 const $ = <T extends HTMLElement>(id:string) => document.getElementById(id) as T;
-const screens = ['landing','theme','tier','task-discovery','profile','cards','results','ranking'];
+const screens = ['landing','theme','tier','task-discovery','profile','cards','results','ranking','builder','builder-admin'];
 function syncPrimaryNav(screen: string): void {
   const activeId = screen === 'ranking'
     ? 'ranking-nav'
@@ -127,6 +130,10 @@ function show(id:string){
   syncPrimaryNav(id);
   window.scrollTo({top:0,behavior:'smooth'});
 }
+window.addEventListener('gyro:navigate', (event) => {
+  const screen = (event as CustomEvent<string>).detail;
+  if (screen === 'builder' || screen === 'builder-admin') show(screen);
+});
 function track(name:string, metadata:Record<string,unknown>={}){void fetch(`${API}/api/events`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,sessionId,metadata})}).catch(()=>{});}
 function startBatch(){ batchStart = index; batchEnd = Math.min(index + BATCH_SIZE, services.length); dislikedThisBatch = []; history = []; }
 function renderChoices(){const audiences:[Audience,string][]=[['student','학생이에요'],['teacher','선생님이에요'],['parent','학부모예요'],['other','그 외예요']];$('audience-choices').innerHTML=audiences.map(([id,label])=>`<button class="choice ${audience===id?'selected':''}" data-audience="${id}">${label}</button>`).join(''); document.querySelectorAll<HTMLElement>('[data-audience]').forEach(b=>b.onclick=()=>{audience=b.dataset.audience as Audience;renderChoices();checkProfile();}); const tags=SHUFFLE_TAGS[currentShuffle];$('interest-choices').innerHTML=tags.map(tag=>`<button class="tag ${interests.has(tag)?'selected':''}" data-interest="${tag}">${tag}</button>`).join('');document.querySelectorAll<HTMLElement>('[data-interest]').forEach(b=>b.onclick=()=>{const tag=b.dataset.interest!;interests.has(tag)?interests.delete(tag):interests.add(tag);renderChoices();checkProfile();});}
@@ -838,6 +845,7 @@ function openPreview(service: Service){
   $('preview-title').textContent = service.name;
   $('preview-article-title').textContent = service.name;
   $('preview-article-desc').textContent = service.tagline;
+  void loadPublicComments(service.id);
   $<HTMLAnchorElement>('preview-open-new').href = service.serviceUrl;
   const frame = $<HTMLIFrameElement>('preview-frame');
   const fallback = $('preview-fallback');
@@ -1241,4 +1249,5 @@ document.addEventListener('click',event=>{
   if(event.target instanceof Node&&!wrapper.contains(event.target))closeThemeSettings();
 });
 restoreAppearanceTheme();
+initializeBuilderPortal(API);
 void loadHomeCatalog();

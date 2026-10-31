@@ -20,6 +20,9 @@ export async function healthyCatalog(services: CatalogService[]) {
       ...service,
       serviceUrl: health.resolvedUrl,
       imageUrl: service.imageUrl ? `/api/service-image/${service.id}` : '',
+      ...(service.verification?.level === 'link'
+        ? { verification: { ...service.verification, verifiedAt: health.checkedAt } }
+        : {}),
       health,
     };
   }));

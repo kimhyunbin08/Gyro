@@ -37,8 +37,33 @@ Actions 배포도 웹 리비전에 `GYRO_API_URL`을 실제 API FQDN으로 주�
 - `POST /api/assistant/chat`
 - `POST /api/events`
 - `POST /api/email-leads`
+- 빌더 인증·서비스 제출/수정·대시보드·관리 API와 공개 댓글은 TRD §13의 경로를 참고한다.
 
 실제 학생 작품은 권한이 확인된 공식 링크만 카탈로그에 넣고, iframe이나 원본 복제는 사용하지 않습니다. 이메일은 결과 저장 목적과 소식 수신 동의를 분리합니다.
+
+## 빌더 포털 설정 및 공개 전 검토
+
+빌더 포털은 API에 아래 설정이 있을 때만 작동합니다. `DATABASE_URL`이 없으면 기존 공개 발견 기능은
+계속 동작하고, 빌더/댓글 API는 `503`으로 비활성 상태를 반환합니다.
+
+- `DATABASE_URL`: private networking/firewall로 API Container App의 outbound만 허용하는 PostgreSQL 연결 문자열.
+- `AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING` 및 `AZURE_COMMUNICATION_EMAIL_SENDER`: 검증된 Azure
+  Communication Services Email 발신자 설정. 발신 도메인/주소 검증을 마친 뒤 연결합니다.
+- `WEB_ORIGIN`: 웹앱의 정확한 Origin (`https://...`, 경로/끝 `/` 없이). 매직링크와 쿠키 기반 인증에 사용합니다.
+- `BUILDER_ADMIN_TOKEN`: 충분히 긴 임의 관리자 비밀값. Container App secret으로 저장하고 웹 번들이나 일반 환경 변수로
+  노출하지 않습니다.
+
+현재 `infra/main.bicep`은 PostgreSQL 및 이메일 리소스를 프로비저닝하지 않습니다. 운영 배포 전에 별도 Azure
+리소스와 안전한 네트워크 경계를 준비하고, 연결 문자열·메일 비밀·관리자 토큰을 API Container App secret으로
+등록해야 합니다. 공개 DB 방화벽에 전체 인터넷이나 광범위한 Azure 주소를 허용하지 마세요. 개발용 `.env`에는
+실제 비밀을 입력하지 말고 로컬 secret store를 사용하세요.
+
+기능 배포와 공개 허가는 별개입니다. 공개 전 `VIBE_VENTURE_REVIEW_QUESTIONS.md`의 학생 저작권/공개 권한,
+미성년자 계정·댓글, 개인정보 처리 역할 및 보존/삭제, 댓글 신고·삭제 운영 질문을 바이브벤처 담당자와
+법률 담당자에게 확인하세요. [`docs/TERMS_DRAFT.md`](docs/TERMS_DRAFT.md) 및
+[`docs/PRIVACY_POLICY_DRAFT.md`](docs/PRIVACY_POLICY_DRAFT.md)의 미확정 항목을 해결하고 법률 승인을 받은 뒤
+게시하며, 운영 대응 절차도 확정해야 합니다. `docs/PRODUCT_OVERVIEW.md`는 현재 제품 범위와 미승격 아이디어를
+요약합니다.
 
 ## 대화형 AI 설정
 
