@@ -602,7 +602,7 @@ h2 em {
 .assistant-thread {
   display: none;
   min-height: 0;
-  max-height: min(34svh, 340px);
+  max-height: min(48svh, 480px);
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
@@ -618,30 +618,54 @@ h2 em {
   display: flex;
 }
 
+#home.has-assistant-conversation .landing-copy {
+  display: none;
+}
+
 .assistant-message {
   display: flex;
   align-items: flex-start;
   gap: 9px;
 }
 
+.assistant-message-content {
+  min-width: 0;
+  max-width: 88%;
+}
+
+.assistant-message-author {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
 .assistant-message p {
-  max-width: 92%;
   margin: 0;
   padding: 10px 12px;
   border-radius: var(--radius-lg);
   background: var(--muted);
   color: var(--foreground);
-  font-size: 12px;
+  font-size: 16px;
   line-height: 1.65;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .assistant-message-user {
   justify-content: flex-end;
 }
 
+.assistant-message-user .assistant-message-author {
+  text-align: right;
+}
+
 .assistant-message-user p {
   background: var(--accent);
+}
+
+.assistant-message-pending p {
+  color: var(--muted-foreground);
 }
 
 .assistant-avatar {
@@ -683,6 +707,11 @@ h2 em {
   line-height: 1.6;
 }
 
+#home.has-assistant-conversation .assistant-form textarea {
+  min-height: 64px;
+  padding: 14px 18px;
+}
+
 .assistant-context {
   color: var(--muted-foreground);
   font-size: 11px;
@@ -711,6 +740,20 @@ h2 em {
   display: block;
   margin-top: 7px;
   line-height: 1.5;
+}
+
+.assistant-consent-settings {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.assistant-consent-settings summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.assistant-consent-settings[open] .assistant-consent {
+  margin-top: 10px;
 }
 
 .assistant-consent {
@@ -743,11 +786,12 @@ h2 em {
   font-size: 12px;
 }
 
-.assistant-form-footer .button span {
+.assistant-form-footer .button [aria-hidden] {
   margin-left: 7px;
 }
 
 .assistant-status-message,
+.assistant-keyboard-hint,
 .assistant-privacy {
   margin: 0;
   color: var(--muted-foreground);
@@ -755,9 +799,16 @@ h2 em {
   line-height: 1.5;
 }
 
+.assistant-keyboard-hint {
+  margin-top: 4px;
+}
+
+.assistant-status-message:empty {
+  display: none;
+}
+
 .assistant-privacy {
   margin-top: 5px;
-  text-align: center;
 }
 
 .assistant-recommendations {
