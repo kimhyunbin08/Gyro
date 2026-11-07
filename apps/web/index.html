@@ -75,6 +75,11 @@
             <form class="assistant-form" id="assistant-form" aria-busy="false">
               <label class="sr-only" id="assistant-message-label" for="assistant-message">해결하고 싶은 문제</label>
               <textarea id="assistant-message" rows="2" maxlength="1500" placeholder="어떤 문제를 해결하고 싶나요? 상황을 편하게 알려주세요." aria-describedby="assistant-keyboard-hint" required></textarea>
+              <div class="assistant-examples" id="assistant-examples" role="group" aria-label="예시 문제로 시작하기">
+                <button type="button" data-assistant-example>팀 일정 맞추는 데 시간이 너무 많이 들어요.</button>
+                <button type="button" data-assistant-example>공부 계획을 세워도 꾸준히 못 지켜요.</button>
+                <button type="button" data-assistant-example>만든 서비스를 알릴 방법을 모르겠어요.</button>
+              </div>
               <details class="assistant-context" id="assistant-context">
                 <summary>기술 스택·공개 GitHub 저장소 추가하기 (선택)</summary>
                 <label for="assistant-tech-stack">현재 사용하는 서비스와 기술</label>
