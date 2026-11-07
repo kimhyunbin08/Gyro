@@ -512,13 +512,40 @@ function appendAssistantMessage(role: AssistantMessage['role'], content: string)
     avatar.textContent = 'g';
     message.append(avatar);
   }
+  const body = document.createElement('div');
+  body.className = 'assistant-message-content';
+  const author = document.createElement('span');
+  author.className = 'assistant-message-author';
+  author.textContent = role === 'assistant' ? 'Gyro' : '나';
   const paragraph = document.createElement('p');
   paragraph.textContent = content;
-  message.append(paragraph);
+  body.append(author, paragraph);
+  message.append(body);
   const thread = $('assistant-thread');
   thread.append(message);
   thread.scrollTop = thread.scrollHeight;
   return message;
+}
+function updateAssistantComposer(): void {
+  const hasConversation = assistantMessages.length > 0 || assistantRequestPending;
+  const messageInput = $<HTMLTextAreaElement>('assistant-message');
+  $('home').classList.toggle('has-assistant-conversation', hasConversation);
+  messageInput.placeholder = assistantRequestPending
+    ? '답변을 기다리는 동안 다음 메시지를 미리 작성할 수 있어요.'
+    : hasConversation
+      ? 'Gyro의 질문에 답하거나, 원하는 조건을 더 알려주세요.'
+      : '어떤 문제를 해결하고 싶나요? 상황을 편하게 알려주세요.';
+  messageInput.rows = hasConversation ? 1 : 2;
+  $('assistant-message-label').textContent = hasConversation ? '답변 또는 추가 요청' : '해결하고 싶은 문제';
+  $('assistant-send-label').textContent = assistantRequestPending
+    ? '답변 기다리는 중'
+    : hasConversation ? '메시지 보내기' : '대화 시작하기';
+  $<HTMLButtonElement>('assistant-send').disabled = assistantRequestPending;
+  $<HTMLButtonElement>('assistant-reset').disabled = assistantRequestPending;
+  $('assistant-form').setAttribute('aria-busy', String(assistantRequestPending));
+  $('assistant-consent-summary').textContent = $<HTMLInputElement>('assistant-consent').checked
+    ? 'AI 전송 동의됨 · 개인정보 안내'
+    : 'AI 전송 동의 · 개인정보 안내';
 }
 function pricingLabel(service: Service): string {
   if (!service.pricing?.source || !service.pricing.verifiedAt) return '요금 확인 필요';
@@ -1197,21 +1224,30 @@ $('assistant-form').addEventListener('submit', async (event) => {
   const messageInput = $<HTMLTextAreaElement>('assistant-message');
   const content = messageInput.value.trim();
   const status = $('assistant-status');
-  if (!content) return;
+  if (!content) {
+    status.textContent = '보낼 메시지를 입력해 주세요.';
+    messageInput.focus();
+    return;
+  }
   if (!$<HTMLInputElement>('assistant-consent').checked) {
     status.textContent = 'AI 전송 동의를 확인해 주세요.';
+    $<HTMLDetailsElement>('assistant-consent-settings').open = true;
+    $<HTMLInputElement>('assistant-consent').focus();
     return;
   }
 
   const userMessage: AssistantMessage = { role: 'user', content };
-  $('home').classList.add('has-assistant-conversation');
-  const messageElement = appendAssistantMessage('user', content);
-  messageInput.value = '';
   assistantRequestPending = true;
-  $<HTMLButtonElement>('assistant-send').disabled = true;
-  $<HTMLButtonElement>('assistant-reset').disabled = true;
+  updateAssistantComposer();
+  const messageElement = appendAssistantMessage('user', content);
+  const pendingMessage = appendAssistantMessage('assistant', '답변을 준비하고 있어요…');
+  pendingMessage.classList.add('assistant-message-pending');
+  messageInput.value = '';
+  $<HTMLDetailsElement>('assistant-context').open = false;
+  $<HTMLDetailsElement>('assistant-consent-settings').open = false;
+  messageInput.focus();
   let completed = false;
-  status.textContent = '문제와 맞는 서비스를 살펴보고 있어요...';
+  status.textContent = '';
   try {
     const response = await fetch(`${API}/api/assistant/chat`, {
       method: 'POST',
@@ -1238,6 +1274,7 @@ $('assistant-form').addEventListener('submit', async (event) => {
     assistantMessages.push(userMessage, { role: 'assistant', content: result.reply });
     if (assistantMessages.length > 12) assistantMessages.splice(0, assistantMessages.length - 12);
     completed = true;
+    pendingMessage.remove();
     appendAssistantMessage('assistant', result.reply);
     appendAssistantRecommendations(result.recommendations);
     status.textContent = result.analyzedRepository
@@ -1246,16 +1283,22 @@ $('assistant-form').addEventListener('submit', async (event) => {
   } catch {
     status.textContent = 'AI 추천 서비스에 연결할 수 없어요. 네트워크를 확인하고 다시 시도해 주세요.';
   } finally {
+    pendingMessage.remove();
     assistantRequestPending = false;
-    $<HTMLButtonElement>('assistant-send').disabled = false;
-    $<HTMLButtonElement>('assistant-reset').disabled = false;
     if (!completed) {
       messageElement.remove();
       if (!messageInput.value) messageInput.value = content;
-      $('home').classList.toggle('has-assistant-conversation', assistantMessages.length > 0);
+      if (!assistantMessages.length) $<HTMLDetailsElement>('assistant-consent-settings').open = true;
     }
+    updateAssistantComposer();
   }
 });
+$<HTMLTextAreaElement>('assistant-message').addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing || event.keyCode === 229) return;
+  event.preventDefault();
+  if (!assistantRequestPending) $<HTMLFormElement>('assistant-form').requestSubmit();
+});
+$('assistant-consent').addEventListener('change', updateAssistantComposer);
 $('assistant-reset').addEventListener('click', () => {
   if (assistantRequestPending) return;
   assistantMessages.length = 0;
@@ -1265,7 +1308,11 @@ $('assistant-reset').addEventListener('click', () => {
   $<HTMLInputElement>('assistant-tech-stack').value = '';
   $<HTMLInputElement>('assistant-repo-url').value = '';
   $<HTMLInputElement>('assistant-consent').checked = false;
+  $<HTMLDetailsElement>('assistant-context').open = false;
+  $<HTMLDetailsElement>('assistant-consent-settings').open = true;
   $('assistant-status').textContent = '';
+  updateAssistantComposer();
+  if (activeScreen === 'home') $<HTMLTextAreaElement>('assistant-message').focus();
 });
 $('service-search').addEventListener('input',()=>{
   homeCatalogPage=0;

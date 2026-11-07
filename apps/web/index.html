@@ -68,14 +68,14 @@
 
           <section class="home-assistant-panel" aria-labelledby="assistant-title">
             <div class="assistant-heading">
-              <div><p class="eyebrow">GYRO AI · 문제에서 시작하기</p><h2 id="assistant-title">찾고 있는 도구를 함께 찾아볼게요.</h2></div>
+              <div><p class="eyebrow">GYRO AI · 대화로 찾기</p><h2 id="assistant-title">원하는 조건을 함께 좁혀볼게요.</h2></div>
               <button class="assistant-reset" id="assistant-reset" type="button">새 대화</button>
             </div>
-            <div class="assistant-thread" id="assistant-thread" role="log" aria-live="polite" aria-relevant="additions text"></div>
-            <form class="assistant-form" id="assistant-form">
-              <label class="sr-only" for="assistant-message">해결하고 싶은 문제</label>
-              <textarea id="assistant-message" rows="2" maxlength="1500" placeholder="예: 매주 회의록을 정리하고 할 일로 옮기는 데 시간이 너무 오래 걸려요." required></textarea>
-              <details class="assistant-context">
+            <div class="assistant-thread" id="assistant-thread" role="log" aria-label="Gyro와의 대화" aria-live="polite" aria-relevant="additions text"></div>
+            <form class="assistant-form" id="assistant-form" aria-busy="false">
+              <label class="sr-only" id="assistant-message-label" for="assistant-message">해결하고 싶은 문제</label>
+              <textarea id="assistant-message" rows="2" maxlength="1500" placeholder="어떤 문제를 해결하고 싶나요? 상황을 편하게 알려주세요." aria-describedby="assistant-keyboard-hint" required></textarea>
+              <details class="assistant-context" id="assistant-context">
                 <summary>기술 스택·공개 GitHub 저장소 추가하기 (선택)</summary>
                 <label for="assistant-tech-stack">현재 사용하는 서비스와 기술</label>
                 <input id="assistant-tech-stack" type="text" maxlength="500" placeholder="예: React, Notion, Slack" />
@@ -83,10 +83,16 @@
                 <input id="assistant-repo-url" type="url" maxlength="300" placeholder="https://github.com/owner/repo" />
                 <small>공개 저장소의 설명·언어·README만 읽어요. 코드는 실행하지 않으며 비공개 저장소는 지원하지 않아요.</small>
               </details>
-              <label class="assistant-consent"><input id="assistant-consent" type="checkbox" /><span>입력한 내용과 선택한 공개 저장소 정보를 GitHub Copilot 및 선택한 모델 제공자에게 보내 추천을 생성하는 데 동의해요. 비밀번호·API 키·개인정보는 입력하지 마세요.</span></label>
-              <div class="assistant-form-footer"><p class="assistant-status-message" id="assistant-status" role="status"></p><button class="button button-primary" id="assistant-send" type="submit">서비스 찾기 <span aria-hidden="true">→</span></button></div>
+              <details class="assistant-consent-settings" id="assistant-consent-settings" open>
+                <summary id="assistant-consent-summary">AI 전송 동의 · 개인정보 안내</summary>
+                <label class="assistant-consent"><input id="assistant-consent" type="checkbox" /><span>입력한 내용과 선택한 공개 저장소 정보를 GitHub Copilot 및 선택한 모델 제공자에게 보내 추천을 생성하는 데 동의해요. 비밀번호·API 키·개인정보는 입력하지 마세요.</span></label>
+                <p class="assistant-privacy">입력 내용과 README는 GitHub Copilot 및 선택한 모델 제공자에게 전송돼요. 서버의 임시 대화 상태는 요청 종료 시 삭제돼요.</p>
+              </details>
+              <div class="assistant-form-footer">
+                <div><p class="assistant-status-message" id="assistant-status" role="status"></p><p class="assistant-keyboard-hint" id="assistant-keyboard-hint">Enter로 전송 · Shift+Enter로 줄바꿈</p></div>
+                <button class="button button-primary" id="assistant-send" type="submit"><span id="assistant-send-label">대화 시작하기</span> <span aria-hidden="true">↑</span></button>
+              </div>
             </form>
-            <p class="assistant-privacy">입력 내용과 README는 GitHub Copilot 및 선택한 모델 제공자에게 전송돼요. 서버의 임시 대화 상태는 요청 종료 시 삭제돼요.</p>
           </section>
         </div>
 
