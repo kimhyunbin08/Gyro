@@ -74,10 +74,11 @@ export function initializePublicComments(apiBase: string): (serviceId: string) =
     try {
       const nickname = (document.getElementById('public-comment-nickname') as HTMLInputElement).value.trim();
       const body = (document.getElementById('public-comment-body') as HTMLTextAreaElement).value.trim();
+      const publicDisclosureAccepted = (document.getElementById('public-comment-privacy-check') as HTMLInputElement).checked;
       const response = await fetch(`${apiBase}/api/services/${encodeURIComponent(currentServiceId)}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nickname, body }),
+        body: JSON.stringify({ nickname, body, publicDisclosureAccepted }),
       });
       const payload = await response.json() as { message?: string };
       if (!response.ok) throw new Error(payload.message || '댓글을 공개하지 못했어요.');

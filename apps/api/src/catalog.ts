@@ -24,6 +24,10 @@ export type ServicePricing = {
   verifiedAt?: string;
   source?: string;
 };
+export type PublicBuilderProfile = {
+  displayName: string;
+  socialLinks: { label: string; url: string }[];
+};
 export type CatalogService = {
   id: string;
   name: string;
@@ -42,6 +46,15 @@ export type CatalogService = {
   connection?: ConnectionGuide;
   verification?: ServiceVerification;
   pricing?: ServicePricing;
+  builderProfiles?: PublicBuilderProfile[];
+  geo?: {
+    problem: string;
+    targetUsers: string[];
+    useCases: string[];
+    capabilities: string[];
+    keywords: string[];
+    recommendationSummary: string;
+  };
 };
 
 export const catalog: CatalogService[] = [

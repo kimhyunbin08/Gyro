@@ -123,6 +123,12 @@ function candidateScore(service: CatalogService, query: string): number {
     service.description,
     ...service.tags,
     ...(service.tasks ?? []),
+    service.geo?.problem ?? '',
+    service.geo?.recommendationSummary ?? '',
+    ...(service.geo?.targetUsers ?? []),
+    ...(service.geo?.useCases ?? []),
+    ...(service.geo?.capabilities ?? []),
+    ...(service.geo?.keywords ?? []),
   ].join(' ').toLocaleLowerCase();
   const tokens = query.toLocaleLowerCase().split(/[^\p{L}\p{N}+#.-]+/u).filter((token) => token.length > 1);
   return tokens.reduce((score, token) => score + (searchable.includes(token) ? Math.min(token.length, 6) : 0), 0);
@@ -153,6 +159,7 @@ function compactService(service: CatalogService): Record<string, unknown> {
     description: service.description.slice(0, 250),
     tags: service.tags,
     tasks: service.tasks ?? [],
+    geo: service.geo,
     kind: service.kind ?? 'service',
     verification: service.verification,
     pricing: service.pricing?.source && service.pricing.verifiedAt ? service.pricing : { model: 'unknown' },

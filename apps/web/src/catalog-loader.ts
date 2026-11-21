@@ -1,6 +1,10 @@
 export type CatalogShuffle = 'vibe-venture' | 'sns' | 'dating' | 'productivity' | 'game' | 'task';
 export type CatalogTier = 'mainstream' | 'emerging';
 export type CatalogKind = 'product' | 'service' | 'skill' | 'mcp';
+export type PublicBuilderProfile = {
+  displayName: string;
+  socialLinks: { label: string; url: string }[];
+};
 export type CatalogService = {
   id: string;
   name: string;
@@ -26,6 +30,7 @@ export type CatalogService = {
   };
   verification?: { level: 'link' | 'docs' | 'install'; verifiedAt?: string; environment?: string; sources: string[] };
   pricing?: { model: 'free' | 'freemium' | 'paid' | 'unknown'; note?: string; verifiedAt?: string; source?: string };
+  builderProfiles?: PublicBuilderProfile[];
 };
 
 const CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
