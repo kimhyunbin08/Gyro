@@ -1,0 +1,13 @@
+{
+  "name": "gyro-ir-capture",
+  "private": true,
+  "type": "module",
+  "description": "실행 중인 로컬 Gyro 화면을 IR용 PNG로 저장",
+  "scripts": {
+    "capture": "node capture.mjs",
+    "capture:chat": "node capture.mjs --chat"
+  },
+  "dependencies": {
+    "playwright": "1.49.1"
+  }
+}

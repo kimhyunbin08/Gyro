@@ -568,7 +568,10 @@ function appendAssistantRecommendations(recommendations: AssistantResponse['reco
     const tagline = document.createElement('p');
     tagline.textContent = service.tagline;
     const explanation = document.createElement('p');
-    explanation.textContent = reason || '설명한 문제와 관련된 카탈로그 항목이에요.';
+    explanation.className = 'assistant-recommendation-reason';
+    const reasonLabel = document.createElement('strong');
+    reasonLabel.textContent = '추천 이유';
+    explanation.append(reasonLabel, document.createTextNode(reason || '설명한 문제와 관련된 카탈로그 항목이에요.'));
     const labels = document.createElement('div');
     labels.className = 'assistant-recommendation-labels';
     for (const label of [kindLabel(service.kind), pricingLabel(service), verificationLabel(service)]) {
@@ -1240,7 +1243,7 @@ $('assistant-form').addEventListener('submit', async (event) => {
   assistantRequestPending = true;
   updateAssistantComposer();
   const messageElement = appendAssistantMessage('user', content);
-  const pendingMessage = appendAssistantMessage('assistant', '답변을 준비하고 있어요…');
+  const pendingMessage = appendAssistantMessage('assistant', '답변을 준비하고 있어요');
   pendingMessage.classList.add('assistant-message-pending');
   messageInput.value = '';
   $<HTMLDetailsElement>('assistant-context').open = false;
@@ -1292,6 +1295,14 @@ $('assistant-form').addEventListener('submit', async (event) => {
     }
     updateAssistantComposer();
   }
+});
+document.querySelectorAll<HTMLButtonElement>('[data-assistant-example]').forEach((button) => {
+  button.addEventListener('click', () => {
+    if (assistantRequestPending) return;
+    const messageInput = $<HTMLTextAreaElement>('assistant-message');
+    messageInput.value = button.textContent?.trim() ?? '';
+    messageInput.focus();
+  });
 });
 $<HTMLTextAreaElement>('assistant-message').addEventListener('keydown', (event) => {
   if (event.key !== 'Enter' || event.shiftKey || event.isComposing || event.keyCode === 229) return;
