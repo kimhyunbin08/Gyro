@@ -16,11 +16,17 @@ function createStore(
   const magic = new Set<string>();
   const sessions = new Map<string, BuilderIdentity>();
   const services: CatalogService[] = [];
-  const submissions = new Map<string, { builderId: string; serviceId: string | null; draft: BuilderServiceDraft }>();
+  let profile = { displayName: '', socialLinks: [] as Array<{ label: string; url: string }>, public: false };
+  const submissions = new Map<string, {
+    builderId: string; serviceId: string | null; draft: BuilderServiceDraft;
+    status: 'pending' | 'approved' | 'rejected'; createdAt: string; decidedAt: string | null;
+    rightsAttestedAt: string; rightsStatementVersion: string;
+  }>();
   const comments = new Map<string, { id: string; serviceId: string; nickname: string | null; body: string; visible: boolean; reportCount: number; createdAt: string }>();
   let sequence = 0;
   const store: BuilderPortalStore = {
     async initialize() {},
+    async close() {},
     async issueMagicLink(_email, tokenHash) { magic.add(tokenHash); },
     async revokeMagicLink(tokenHash) { magic.delete(tokenHash); },
     async consumeMagicLink(tokenHash) {
@@ -37,27 +43,49 @@ function createStore(
       return true;
     },
     async listServices() { return services; },
+    async listPublicBuilderProfiles() {
+      if (!profile.public || !profile.displayName) return [];
+      return services.map(({ id }) => ({
+        serviceId: id,
+        profile: { displayName: profile.displayName, socialLinks: profile.socialLinks },
+      }));
+    },
     async listOwnedServices() { return services; },
     async listOwnedServiceIds() { return services.map(({ id }) => id); },
     async ownsService(_builderId, serviceId) { return services.some(({ id }) => id === serviceId); },
     async requestOwnership() {},
     async listOwnershipRequests() { return []; },
     async resolveOwnershipRequest() { return false; },
-    async createSubmission(builderId, serviceId, draft) {
-      submissions.set(`submission-${++sequence}`, { builderId, serviceId, draft });
+    async createSubmission(builderId, serviceId, draft, rightsStatementVersion) {
+      submissions.set(`submission-${++sequence}`, {
+        builderId, serviceId, draft, rightsStatementVersion, rightsAttestedAt: new Date().toISOString(),
+        status: 'pending', createdAt: new Date().toISOString(), decidedAt: null,
+      });
     },
     async listSubmissions() {
-      return [...submissions.entries()].map(([id, row]) => ({
+      return [...submissions.entries()].filter(([, row]) => row.status === 'pending').map(([id, row]) => ({
         id,
         builderEmail: builder.email,
         serviceId: row.serviceId,
         draft: row.draft,
-        createdAt: new Date().toISOString(),
+        createdAt: row.createdAt,
+        rightsAttestedAt: row.rightsAttestedAt,
+        rightsStatementVersion: row.rightsStatementVersion,
+      }));
+    },
+    async listBuilderSubmissions(builderId) {
+      return [...submissions.entries()].filter(([, row]) => row.builderId === builderId).map(([id, row]) => ({
+        id,
+        serviceId: row.serviceId,
+        draft: row.draft,
+        status: row.status,
+        createdAt: row.createdAt,
+        decidedAt: row.decidedAt,
       }));
     },
     async approveSubmission(submissionId) {
       const row = submissions.get(submissionId);
-      if (!row) return false;
+      if (!row || row.status !== 'pending') return false;
       const id = row.serviceId ?? `builder-${sequence}`;
       const service: CatalogService = {
         ...row.draft,
@@ -71,10 +99,17 @@ function createStore(
       const existing = services.findIndex((entry) => entry.id === id);
       if (existing < 0) services.push(service);
       else services[existing] = service;
-      submissions.delete(submissionId);
+      row.status = 'approved';
+      row.decidedAt = new Date().toISOString();
       return true;
     },
-    async rejectSubmission(submissionId) { return submissions.delete(submissionId); },
+    async rejectSubmission(submissionId) {
+      const row = submissions.get(submissionId);
+      if (!row || row.status !== 'pending') return false;
+      row.status = 'rejected';
+      row.decidedAt = new Date().toISOString();
+      return true;
+    },
     async listComments(serviceId) {
       return [...comments.values()].filter((comment) => comment.serviceId === serviceId && comment.visible);
     },
@@ -115,6 +150,26 @@ function createStore(
       }));
     },
     async recordFunnelEvent() {},
+    async getBuilderProfile() { return profile; },
+    async updateBuilderProfile(_builderId, updated) { profile = updated; },
+    async listInstitutions() { return []; },
+    async createInstitution() { return null; },
+    async listBuilderInstitutions() { return []; },
+    async requestInstitutionMembership() { return false; },
+    async withdrawInstitutionMembership() { return false; },
+    async isInstitutionAdmin() { return false; },
+    async listManagedInstitutions() { return []; },
+    async updateInstitutionProfile() { return false; },
+    async revokeInstitutionMembership() { return false; },
+    async listInstitutionAuditHistory() { return []; },
+    async listInstitutionMembershipRequests() { return []; },
+    async resolveInstitutionMembershipRequest() { return false; },
+    async requestInstitutionService() { return false; },
+    async listInstitutionServiceRequests() { return []; },
+    async resolveInstitutionServiceRequest() { return false; },
+    async listInstitutionServiceIds() { return []; },
+    async getInstitutionDashboard() { return []; },
+    async listInstitutionMembers() { return []; },
   };
   return store;
 }
@@ -125,6 +180,7 @@ describe('builder portal and public comments', () => {
     vi.stubEnv('BUILDER_ADMIN_TOKEN', 'test-admin-token');
     vi.stubEnv('NODE_ENV', 'test');
     vi.stubEnv('GYRO_BUILDER_PORTAL_ENABLED', 'true');
+    vi.stubEnv('GYRO_PUBLIC_COMMENTS_ENABLED', 'true');
   });
   afterEach(() => vi.unstubAllEnvs());
 
@@ -153,6 +209,14 @@ describe('builder portal and public comments', () => {
       .post('/api/services/2026-06-1/comments').send({ body: '운영자 설정이 필요합니다.' });
     expect(response.status).toBe(503);
     expect(createComment).not.toHaveBeenCalled();
+  });
+
+  it('keeps public comments disabled unless explicitly enabled', async () => {
+    vi.stubEnv('GYRO_PUBLIC_COMMENTS_ENABLED', 'false');
+    const app = createApp({ builderStore: createStore() });
+    expect((await request(app).get('/api/services/2026-06-1/comments')).status).toBe(503);
+    expect((await request(app).post('/api/services/2026-06-1/comments')
+      .send({ body: '댓글 기능 비활성화 테스트입니다.', publicDisclosureAccepted: true })).status).toBe(503);
   });
 
   it('uses a one-time email link and requires the configured web origin', async () => {
@@ -184,23 +248,74 @@ describe('builder portal and public comments', () => {
     expect(reused.status).toBe(401);
   });
 
+  it('routes institution login links back to the institution portal and scopes the session cookie to the API', async () => {
+    const store = createStore();
+    let link = '';
+    const app = createApp({ builderStore: store, sendMagicLink: async (_email, sentLink) => { link = sentLink; } });
+    const sent = await request(app)
+      .post('/api/builder/auth/request')
+      .set('Origin', 'http://localhost:4173')
+      .send({ email: 'institution@example.com', returnTo: 'institution' });
+    expect(sent.status).toBe(202);
+    expect(new URLSearchParams(new URL(link).hash.slice(1)).get('returnTo')).toBe('institution');
+
+    const token = new URLSearchParams(new URL(link).hash.slice(1)).get('token')!;
+    const verified = await request(app)
+      .post('/api/builder/auth/verify')
+      .set('Origin', 'http://localhost:4173')
+      .send({ token });
+    expect(verified.headers['set-cookie'][0]).toContain('Path=/api;');
+  });
+
+  it('keeps institution management restricted to that institution’s administrator', async () => {
+    const store = createStore();
+    const resolveRequest = vi.spyOn(store, 'resolveInstitutionMembershipRequest');
+    await store.createSession('builder-1', digestToken('known-session'));
+    const response = await request(createApp({ builderStore: store }))
+      .patch('/api/institution/institution-1/members/builder-2')
+      .set('Origin', 'http://localhost:4173')
+      .set('Cookie', 'gyro_builder_session=known-session')
+      .send({ approved: true });
+    expect(response.status).toBe(403);
+    expect(resolveRequest).not.toHaveBeenCalled();
+  });
+
   it('keeps new service submissions private until operator approval', async () => {
     const store = createStore();
     const app = createApp({ builderStore: store });
     const cookie = 'gyro_builder_session=known-session';
     await store.createSession('builder-1', digestToken('known-session'));
+    await store.updateBuilderProfile('builder-1', {
+      displayName: 'Maker Name',
+      socialLinks: [{ label: 'Instagram', url: 'https://instagram.com/maker' }],
+      public: true,
+    });
     const draft: BuilderServiceDraft = {
       name: '회의 정리 도구',
       tagline: '회의 내용을 정리하고 할 일을 나눠요',
       description: '회의 기록을 정돈해 팀이 다음 작업을 이어가도록 돕는 서비스입니다.',
       serviceUrl: 'https://maker.example/',
       tags: ['협업', '생산성'],
+      geo: {
+        problem: '회의 기록과 할 일 분류가 어렵습니다.',
+        targetUsers: ['소규모 협업 팀'],
+        useCases: ['회의 후 할 일 정리'],
+        capabilities: ['회의 내용 요약'],
+        keywords: ['회의 정리'],
+        recommendationSummary: '회의 결과 정리가 필요한 팀에 적합합니다.',
+      },
     };
-    const submitted = await request(app)
+    const missingRights = await request(app)
       .post('/api/builder/services')
       .set('Origin', 'http://localhost:4173')
       .set('Cookie', cookie)
       .send(draft);
+    expect(missingRights.status).toBe(400);
+    const submitted = await request(app)
+      .post('/api/builder/services')
+      .set('Origin', 'http://localhost:4173')
+      .set('Cookie', cookie)
+      .send({ ...draft, rightsConfirmed: true });
     expect(submitted.status).toBe(202);
     const beforeApproval = await request(app).get('/api/services?shuffle=vibe-venture');
     expect(beforeApproval.body.services.some((service: CatalogService) => service.name === draft.name)).toBe(false);
@@ -209,12 +324,23 @@ describe('builder portal and public comments', () => {
 
     const queued = await request(app).get('/api/admin/submissions').set('X-Admin-Token', 'test-admin-token');
     const id = queued.body.submissions[0].id as string;
+    expect(queued.body.submissions[0]).toEqual(expect.objectContaining({
+      rightsStatementVersion: 'builder-rights-v1',
+      rightsAttestedAt: expect.any(String),
+    }));
     const unauthorized = await request(app).post(`/api/admin/submissions/${id}/approve`);
     expect(unauthorized.status).toBe(401);
     const approved = await request(app).post(`/api/admin/submissions/${id}/approve`).set('X-Admin-Token', 'test-admin-token');
     expect(approved.status).toBe(200);
     const afterApproval = await request(app).get('/api/services?shuffle=vibe-venture');
     expect(afterApproval.body.services.some((service: CatalogService) => service.name === draft.name)).toBe(true);
+    expect(afterApproval.body.services.find((service: CatalogService) => service.name === draft.name).geo).toEqual(draft.geo);
+    expect(afterApproval.body.services.find((service: CatalogService) => service.name === draft.name).builderProfiles)
+      .toEqual([{ displayName: 'Maker Name', socialLinks: [{ label: 'Instagram', url: 'https://instagram.com/maker' }] }]);
+    await store.updateBuilderProfile('builder-1', { displayName: 'Maker Name', socialLinks: [], public: false });
+    const privateProfileCatalog = await request(app).get('/api/services?shuffle=vibe-venture');
+    expect(privateProfileCatalog.body.services.find((service: CatalogService) => service.name === draft.name).builderProfiles)
+      .toBeUndefined();
     const defaultCatalog = await request(app).get('/api/services');
     expect(defaultCatalog.body.services.some((service: CatalogService) => service.name === draft.name)).toBe(true);
     const emerging = await request(app).get('/api/services?tier=emerging');
@@ -261,7 +387,7 @@ describe('builder portal and public comments', () => {
       .post('/api/builder/services')
       .set('Origin', 'http://localhost:4173')
       .set('Cookie', cookie)
-      .send(draft);
+      .send({ ...draft, rightsConfirmed: true });
     expect(allowed.status).toBe(202);
 
     const revoked = await request(app)
@@ -286,7 +412,7 @@ describe('builder portal and public comments', () => {
       serviceUrl: 'https://maker.example/',
       tags: ['커뮤니티'],
     };
-    await store.createSubmission('builder-1', 'sns-1', draft);
+    await store.createSubmission('builder-1', 'sns-1', draft, 'builder-rights-v1');
     const submission = (await store.listSubmissions())[0];
     await store.approveSubmission(submission.id);
     const app = createApp({ builderStore: store });
@@ -313,11 +439,15 @@ describe('builder portal and public comments', () => {
     expect(response.headers['access-control-allow-methods']).toContain('DELETE');
   });
 
-  it('publishes anonymous comments immediately and supports report, restore, and operator deletion', async () => {
+  it('requires public disclosure confirmation and supports comment report, restore, and deletion', async () => {
     const app = createApp({ builderStore: createStore() });
+    const missingDisclosure = await request(app)
+      .post('/api/services/2026-06-1/comments')
+      .send({ nickname: '', body: '공개 안내 확인 누락 테스트입니다.' });
+    expect(missingDisclosure.status).toBe(400);
     const created = await request(app)
       .post('/api/services/2026-06-1/comments')
-      .send({ nickname: '', body: '설명이 명확해서 사용해보고 싶어요.' });
+      .send({ nickname: '', body: '설명이 명확해서 사용해보고 싶어요.', publicDisclosureAccepted: true });
     expect(created.status).toBe(201);
     const commentId = created.body.id as string;
     const visible = await request(app).get('/api/services/2026-06-1/comments');

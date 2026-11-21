@@ -44,7 +44,9 @@ Actions 배포도 웹 리비전에 `GYRO_API_URL`을 실제 API FQDN으로 주�
 ## 빌더 포털 설정 및 공개 전 검토
 
 빌더 포털과 공개 댓글은 기본 비활성 상태입니다. 기존 `DATABASE_URL`이 있더라도 자동으로 켜지지 않습니다.
-담당 기관·법률 검토와 아래 설정을 마친 후에만 `GYRO_BUILDER_PORTAL_ENABLED=true`를 명시하세요.
+내부 법률·운영 위험 검토와 코드상 동의/권리 확인 장치를 반영했지만, 실제 운영 주체·기관 역할·연령 정책·
+연락처·보유 기간·제공자 계약의 확인은 완료된 법률 승인으로 간주하지 않습니다. 외부 담당자/법률 검토 및
+아래 설정이 끝나기 전에는 운영 환경에서 두 기능을 활성화하지 마세요.
 비활성 상태에서는 DB에 연결하거나 스키마를 변경하지 않으며 빌더/댓글/관리자 API는 `503`을 반환합니다.
 기존 공개 발견 기능은 계속 동작합니다. 공개 설정이 켜졌는데 필수 설정이 누락되면 API 시작이 실패합니다.
 
@@ -54,6 +56,14 @@ Actions 배포도 웹 리비전에 `GYRO_API_URL`을 실제 API FQDN으로 주�
 - `WEB_ORIGIN`: 웹앱의 정확한 Origin (`https://...`, 경로/끝 `/` 없이). 매직링크와 쿠키 기반 인증에 사용합니다.
 - `BUILDER_ADMIN_TOKEN`: 충분히 긴 임의 관리자 비밀값. Container App secret으로 저장하고 웹 번들이나 일반 환경 변수로
   노출하지 않습니다.
+- `GYRO_PUBLIC_COMMENTS_ENABLED`: 댓글 공개 운영과 개인정보/권리 검토를 마친 뒤에만 `true`로 설정합니다.
+  기본값은 비활성이고, 빌더 포털이 활성화되지 않은 상태에서 이를 켜면 API 시작을 거부합니다.
+
+빌더 서비스 제출·수정은 서버가 공개 권한 확인(`builder-rights-v1`)을 요구하고 버전·확인 시각을 검수 기록에
+저장합니다. 공개 댓글은 별도 플래그가 켜진 환경에서만 받으며, 서버가 공개 안내 확인(`public-comment-v1`)을
+검증하고 버전·확인 시각을 저장합니다. 이 확인 기록은 권리 보유나 법적 동의의 충분성을 보증하지 않습니다.
+만료된 매직링크와 세션은 저장소 초기화 시 정리합니다. 다른 개인정보의 보유·삭제 기간은 실제 목적과 법적
+보존 의무를 확인해 별도로 정해야 하므로 자동 만료를 임의로 적용하지 않습니다.
 
 현재 `infra/main.bicep`은 PostgreSQL 및 이메일 리소스를 프로비저닝하지 않습니다. 운영 배포 전에 별도 Azure
 리소스와 안전한 네트워크 경계를 준비하고, 연결 문자열·메일 비밀·관리자 토큰을 API Container App secret으로
@@ -62,12 +72,27 @@ Actions 배포도 웹 리비전에 `GYRO_API_URL`을 실제 API FQDN으로 주�
 기존 PostgreSQL도 방화벽을 별도로 확인하세요. `0.0.0.0`의 "모든 Azure 서비스 허용" 규칙은
 API outbound만 허용하는 경계가 아니므로 빌더/댓글 공개 전에 private networking 또는 제한된 규칙으로 교체해야 합니다.
 
-기능 배포와 공개 허가는 별개입니다. 공개 전 `VIBE_VENTURE_REVIEW_QUESTIONS.md`의 학생 저작권/공개 권한,
-미성년자 계정·댓글, 개인정보 처리 역할 및 보존/삭제, 댓글 신고·삭제 운영 질문을 바이브벤처 담당자와
-법률 담당자에게 확인하세요. [`docs/TERMS_DRAFT.md`](docs/TERMS_DRAFT.md) 및
-[`docs/PRIVACY_POLICY_DRAFT.md`](docs/PRIVACY_POLICY_DRAFT.md)의 미확정 항목을 해결하고 법률 승인을 받은 뒤
-게시하며, 운영 대응 절차도 확정해야 합니다. `docs/PRODUCT_OVERVIEW.md`는 현재 제품 범위와 미승격 아이디어를
-요약합니다.
+기능 배포와 공개 허가는 별개입니다. 내부 위험 검토와 소스 확인 및 구현 결과는
+[`VIBE_VENTURE_REVIEW_QUESTIONS.md`](VIBE_VENTURE_REVIEW_QUESTIONS.md)에 기록했습니다. 공개 전 해당 문서의
+프로그램 참가자/권리자 확인, 미성년자 처리, 개인정보 처리자·수탁자 관계, 제3자/국외 이전, 처리·보유 기간,
+문의·신고 담당자, 저작권 중단 요청 절차에 대한 실제 답변과 계약을 받아야 합니다.
+[`docs/TERMS_DRAFT.md`](docs/TERMS_DRAFT.md) 및 [`docs/PRIVACY_POLICY_DRAFT.md`](docs/PRIVACY_POLICY_DRAFT.md)의
+대괄호 항목을 운영 사실로 채우고 법률 검토자가 승인하기 전에는 공개 정책으로 게시하지 않습니다.
+
+### 배포 전 로컬 확인
+
+배포 명령을 실행하기 전에 별도 터미널 두 개에서 개발 서버를 실행합니다. 기본 설정은 빌더·댓글 기능을
+비활성화하므로 개인정보 저장소나 메일 발신 설정 없이 사용자 발견 화면을 확인할 수 있습니다.
+
+```bash
+npm run dev:api
+npm run dev:web
+```
+
+브라우저에서 `http://localhost:4173`과 API `http://localhost:3001/health`를 확인합니다. 개발 서버는 기본
+loopback 주소에만 바인딩되고 빌더/댓글은 기본 비활성으로 확인됩니다. 인증·DB 저장·권한 검증은 자동 테스트와
+빈 로컬 PostgreSQL 격리 DB 통합 테스트로 검증합니다. 로컬 미리보기는 `azd up`, `azd deploy` 또는 GitHub
+Actions 배포를 실행하지 않습니다.
 
 ## 대화형 AI 설정
 

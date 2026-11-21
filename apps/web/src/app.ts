@@ -110,11 +110,11 @@ let profileCatalogReady = false;
 let profileCatalogError = false;
 let profileLoadToken = 0;
 const $ = <T extends HTMLElement>(id:string) => document.getElementById(id) as T;
-const screens = ['landing','home','discovery','settings','theme','tier','task-discovery','profile','cards','results','ranking','builder','builder-admin'];
-const mainRoutes: Record<string, string> = { landing: 'landing', home: 'home', feed: 'builder', discover: 'discovery', settings: 'settings' };
+const screens = ['landing','home','discovery','settings','theme','tier','task-discovery','profile','cards','results','ranking','builder','builder-admin','institution'];
+const mainRoutes: Record<string, string> = { landing: 'landing', home: 'home', feed: 'builder', discover: 'discovery', settings: 'settings', institution: 'institution' };
 function routeForScreen(screen: string): string {
   if (screen === 'builder' || screen === 'builder-admin') return 'feed';
-  if (screen === 'landing' || screen === 'home' || screen === 'settings') return screen;
+  if (screen === 'landing' || screen === 'home' || screen === 'settings' || screen === 'institution') return screen;
   return 'discover';
 }
 function syncPrimaryNav(screen: string): void {
@@ -155,9 +155,10 @@ function show(id: string, updateHistory = true, focus = true){
 }
 window.addEventListener('gyro:navigate', (event) => {
   const screen = (event as CustomEvent<string>).detail;
-  if (screen === 'builder' || screen === 'builder-admin') {
+  if (screen === 'builder' || screen === 'builder-admin' || screen === 'institution') {
     resetDiscovery();
     show(screen);
+    if (screen === 'institution') window.dispatchEvent(new CustomEvent('gyro:institution-refresh'));
   }
 });
 function track(name:string, metadata:Record<string,unknown>={}){void fetch(`${API}/api/events`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,sessionId,metadata})}).catch(()=>{});}
@@ -299,6 +300,29 @@ function verificationLabel(service: Service): string {
 function isGuideService(service: Service): boolean {
   return service.kind === 'skill' || service.kind === 'mcp';
 }
+function appendBuilderProfiles(container: HTMLElement, service: Service): void {
+  if (!service.builderProfiles?.length) return;
+  const section = document.createElement('div');
+  section.className = 'service-builder-profiles';
+  for (const profile of service.builderProfiles) {
+    const row = document.createElement('div');
+    row.className = 'service-builder-profile';
+    const name = document.createElement('span');
+    name.className = 'service-builder-name';
+    name.textContent = profile.displayName;
+    row.append(name);
+    for (const link of profile.socialLinks) {
+      const anchor = document.createElement('a');
+      anchor.href = link.url;
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+      anchor.textContent = link.label;
+      row.append(anchor);
+    }
+    section.append(row);
+  }
+  container.append(section);
+}
 function createHomeServiceCard(service: Service, includeDescription = false): HTMLElement {
   const article = document.createElement('article');
   article.className = 'home-product-card';
@@ -356,6 +380,7 @@ function createHomeServiceCard(service: Service, includeDescription = false): HT
     description.textContent = service.description || service.tagline;
     copy.append(description);
   }
+  appendBuilderProfiles(copy, service);
 
   const footer = document.createElement('div');
   footer.className = 'home-product-footer';
@@ -610,6 +635,7 @@ function renderCard(){
   // a failed/slow fetch never leaves the full-screen card looking dead/black.
   stage.innerHTML = `<article class="service-card image-fallback"><span class="service-card-initial" aria-hidden="true">${service.name.charAt(0)}</span><span class="swipe-stamp like" aria-hidden="true">관심 있음</span><span class="swipe-stamp nope" aria-hidden="true">관심 없음</span><div class="service-copy"><div class="service-tags"><span class="kind-badge">${kindLabel(service.kind)}</span><span class="verification-badge">${verificationLabel(service)}</span>${service.tags.map(t=>`<span>${t}</span>`).join('')}</div><h3>${service.name}</h3><p>${service.tagline}</p><p class="service-reason">✨ ${recommendationReason(service)}</p><button class="preview-button" type="button" ${isGuideService(service)?'data-guide':'data-preview'}>${isGuideService(service)?'연결 가이드':'미리보기 ⤢'}</button></div></article>`;
   const card = stage.querySelector<HTMLElement>('.service-card')!;
+  appendBuilderProfiles(card.querySelector<HTMLElement>('.service-copy')!, service);
   if (service.imageUrl) {
     const preload = new Image();
     preload.onload = () => {
@@ -1182,7 +1208,11 @@ function resetDiscovery(): void {
   currentShuffle = 'vibe-venture';
   pendingThemeShuffle = null;
 }
-function navigateMain(screen: string): void { resetDiscovery(); show(screen); }
+function navigateMain(screen: string): void {
+  resetDiscovery();
+  show(screen);
+  if (screen === 'institution') window.dispatchEvent(new CustomEvent('gyro:institution-refresh'));
+}
 function goHome(){ navigateMain('home'); }
 $('theme-back').onclick = () => navigateMain('discovery');
 $('task-back').onclick = () => navigateMain('discovery');
@@ -1356,6 +1386,23 @@ document.querySelectorAll<HTMLButtonElement>('[data-enter-service]').forEach(but
     goHome();
   };
 });
+document.querySelectorAll<HTMLButtonElement>('[data-enter-builder]').forEach(button=>{
+  button.onclick=()=> {
+    platformTheme = 'midnight';
+    restoreAppearanceTheme();
+    navigateMain('builder');
+  };
+});
+document.querySelectorAll<HTMLButtonElement>('[data-enter-institution]').forEach(button=>{
+  button.onclick=()=> {
+    platformTheme = 'midnight';
+    restoreAppearanceTheme();
+    navigateMain('institution');
+  };
+});
+document.querySelectorAll<HTMLButtonElement>('[data-back-landing]').forEach(button=>{
+  button.onclick=()=>navigateMain('landing');
+});
 document.querySelectorAll<HTMLButtonElement>('[data-app-theme]').forEach(button=>button.onclick=()=>{
   const theme=button.dataset.appTheme;
   if(theme && isAppearanceTheme(theme)) {
@@ -1428,6 +1475,7 @@ window.addEventListener('hashchange',()=>{
   const screen=mainRoutes[location.hash.slice(1)] ?? 'landing';
   resetDiscovery();
   show(screen,false);
+  if (screen === 'institution') window.dispatchEvent(new CustomEvent('gyro:institution-refresh'));
 });
 restoreAppearanceTheme();
 const initialScreen = mainRoutes[location.hash.slice(1)] ?? 'landing';
@@ -1461,4 +1509,5 @@ initializeBuilderPortal(API, ownedServices => {
     list.append(card);
   }
 });
+if (initialScreen === 'institution') window.dispatchEvent(new CustomEvent('gyro:institution-refresh'));
 void loadHomeCatalog();

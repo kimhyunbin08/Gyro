@@ -27,6 +27,26 @@ describe('POST /api/assistant/chat', () => {
     vi.restoreAllMocks();
   });
 
+  it('uses approved Gyro GEO fields when ranking assistant candidates', () => {
+    const base = allShuffleServices()[0];
+    const services = [
+      { ...base, id: 'without-geo', geo: undefined },
+      {
+        ...base,
+        id: 'with-geo',
+        geo: {
+          problem: '지출 정산 자료를 모으기 어렵습니다.',
+          targetUsers: ['소규모 회계 팀'],
+          useCases: ['영수증을 분류해 월간 지출 정리'],
+          capabilities: ['지출 영수증 분류'],
+          keywords: ['expense reconciliation'],
+          recommendationSummary: '영수증 분류와 월간 지출 정리가 필요한 경우',
+        },
+      },
+    ];
+    expect(selectAssistantCandidates(services, '영수증 분류 및 월간 지출 정리')[0].id).toBe('with-geo');
+  });
+
   it('rejects malformed chat requests', async () => {
     const response = await request(app).post('/api/assistant/chat').send({ messages: [] });
     expect(response.status).toBe(400);
